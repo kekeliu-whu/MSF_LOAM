@@ -12,11 +12,9 @@
 #include <ros/ros.h>
 #include <rosbag/bag.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <sensor_msgs/image_encodings.h>
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Dense>
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/opencv.hpp>
 #include <string>
