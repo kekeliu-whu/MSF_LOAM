@@ -61,10 +61,10 @@ int g_cloud_index_curr = 0;      // 当前扫描帧下标
 double g_min_range;              // 最小扫描距离
 int g_scan_num;                  // 扫描个数
 
-std::vector<float> g_cloud_curvatures;         // 点的曲率
-std::vector<int> g_cloud_sorted_indices;       // 通过曲率对点排序
-std::vector<bool> g_is_cloud_neighbor_picked;  // 邻近
-std::vector<int> g_cloud_labels;               // 扫描线上点的类型
+std::vector<float> g_cloud_curvatures(400000);    // 点的曲率
+std::vector<int> g_cloud_sorted_indices(400000);  // 通过曲率对点排序
+std::vector<bool> g_is_cloud_neighbor_picked(400000);  // 临近点是否已被选取
+std::vector<int> g_cloud_labels(400000);  // 扫描线上点的类型
 
 ros::Publisher g_cloud_publisher;
 ros::Publisher g_corner_cloud_publisher;
@@ -72,13 +72,6 @@ ros::Publisher g_corner_less_cloud_publisher;
 ros::Publisher g_surf_cloud_publisher;
 ros::Publisher g_surf_less_cloud_publisher;
 ros::Publisher g_removed_cloud_publisher;
-
-void InitBuffer() {
-  g_cloud_curvatures.resize(400000);
-  g_cloud_sorted_indices.resize(400000);
-  g_is_cloud_neighbor_picked.resize(400000);
-  g_cloud_labels.resize(400000, P_UNKNOWN);
-}
 
 }  // namespace
 
@@ -373,31 +366,31 @@ void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*laser_cloud, laser_cloud_out_msg);
   laser_cloud_out_msg.header.stamp = laser_cloud_msg->header.stamp;
-  laser_cloud_out_msg.header.frame_id = "/camera_init";
+  laser_cloud_out_msg.header.frame_id = "/aft_mapped";
   g_cloud_publisher.publish(laser_cloud_out_msg);
 
   sensor_msgs::PointCloud2 corner_sharp_cloud_msg;
   pcl::toROSMsg(corner_sharp_cloud, corner_sharp_cloud_msg);
   corner_sharp_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  corner_sharp_cloud_msg.header.frame_id = "/camera_init";
+  corner_sharp_cloud_msg.header.frame_id = "/aft_mapped";
   g_corner_cloud_publisher.publish(corner_sharp_cloud_msg);
 
   sensor_msgs::PointCloud2 corner_less_sharp_cloud_msg;
   pcl::toROSMsg(corner_less_sharp_cloud, corner_less_sharp_cloud_msg);
   corner_less_sharp_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  corner_less_sharp_cloud_msg.header.frame_id = "/camera_init";
+  corner_less_sharp_cloud_msg.header.frame_id = "/aft_mapped";
   g_corner_less_cloud_publisher.publish(corner_less_sharp_cloud_msg);
 
   sensor_msgs::PointCloud2 surf_flat_cloud_msg;
   pcl::toROSMsg(surf_flat_cloud, surf_flat_cloud_msg);
   surf_flat_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  surf_flat_cloud_msg.header.frame_id = "/camera_init";
+  surf_flat_cloud_msg.header.frame_id = "/aft_mapped";
   g_surf_cloud_publisher.publish(surf_flat_cloud_msg);
 
   sensor_msgs::PointCloud2 surf_less_flat_cloud_msg;
   pcl::toROSMsg(surf_less_flat_cloud, surf_less_flat_cloud_msg);
   surf_less_flat_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  surf_less_flat_cloud_msg.header.frame_id = "/camera_init";
+  surf_less_flat_cloud_msg.header.frame_id = "/aft_mapped";
   g_surf_less_cloud_publisher.publish(surf_less_flat_cloud_msg);
 
   LOG_STEP_TIME("Scan registration", t_whole.toc());
@@ -409,11 +402,8 @@ int main(int argc, char **argv) {
   FLAGS_logtostderr = true;
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
-
   ros::init(argc, argv, "scanRegistration");
   ros::NodeHandle nh;
-
-  InitBuffer();
 
   // 获取ROS参数
   CHECK(nh.param<int>("scan_line", g_scan_num, 16))
