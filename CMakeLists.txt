@@ -37,7 +37,7 @@ catkin_package(
 
 
 add_executable(ascanRegistration src/scanRegistration.cpp)
-target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} glog gflags)
 
 add_executable(alaserOdometry src/laserOdometry.cpp)
 target_link_libraries(alaserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})

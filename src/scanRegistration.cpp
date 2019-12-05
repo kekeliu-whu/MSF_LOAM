@@ -34,7 +34,6 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <opencv/cv.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -42,6 +41,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_datatypes.h>
+#include <Eigen/Eigen>
 #include <cmath>
 #include <string>
 #include <vector>
@@ -52,34 +52,40 @@ using std::atan2;
 using std::cos;
 using std::sin;
 
-const double scanPeriod = 0.1;
+namespace {
 
-const int systemDelay = 0;
-int systemInitCount = 0;
-bool systemInited = false;
-int N_SCANS = 0;
-float cloudCurvature[400000];
-int cloudSortInd[400000];
-int cloudNeighborPicked[400000];
-int cloudLabel[400000];
+enum PointLabel { P_UNKNOWN = 0, P_LESS_SHARP = 1, P_SHARP = 2, P_FLAT = -1 };
 
-bool comp(int i, int j) { return (cloudCurvature[i] < cloudCurvature[j]); }
+const double kScanPeriod = 0.1;  // 扫描周期
+int g_cloud_index_curr = 0;      // 当前扫描帧下标
+double g_min_range;              // 最小扫描距离
+int g_scan_num;                  // 扫描个数
 
-ros::Publisher pubLaserCloud;
-ros::Publisher pubCornerPointsSharp;
-ros::Publisher pubCornerPointsLessSharp;
-ros::Publisher pubSurfPointsFlat;
-ros::Publisher pubSurfPointsLessFlat;
-ros::Publisher pubRemovePoints;
-std::vector<ros::Publisher> pubEachScan;
+std::vector<float> g_cloud_curvatures;         // 点的曲率
+std::vector<int> g_cloud_sorted_indices;       // 通过曲率对点排序
+std::vector<bool> g_is_cloud_neighbor_picked;  // 邻近
+std::vector<int> g_cloud_labels;               // 扫描线上点的类型
 
-bool PUB_EACH_LINE = false;
+ros::Publisher g_cloud_publisher;
+ros::Publisher g_corner_cloud_publisher;
+ros::Publisher g_corner_less_cloud_publisher;
+ros::Publisher g_surf_cloud_publisher;
+ros::Publisher g_surf_less_cloud_publisher;
+ros::Publisher g_removed_cloud_publisher;
 
-double MINIMUM_RANGE = 0.1;
+void InitBuffer() {
+  g_cloud_curvatures.resize(400000);
+  g_cloud_sorted_indices.resize(400000);
+  g_is_cloud_neighbor_picked.resize(400000);
+  g_cloud_labels.resize(400000, P_UNKNOWN);
+}
+
+}  // namespace
 
 template <typename PointT>
-void removeClosedPointCloud(const pcl::PointCloud<PointT> &cloud_in,
-                            pcl::PointCloud<PointT> &cloud_out, float thres) {
+void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
+                                pcl::PointCloud<PointT> &cloud_out,
+                                double min_range) {
   if (&cloud_in != &cloud_out) {
     cloud_out.header = cloud_in.header;
     cloud_out.points.resize(cloud_in.points.size());
@@ -91,7 +97,7 @@ void removeClosedPointCloud(const pcl::PointCloud<PointT> &cloud_in,
     if (cloud_in.points[i].x * cloud_in.points[i].x +
             cloud_in.points[i].y * cloud_in.points[i].y +
             cloud_in.points[i].z * cloud_in.points[i].z <
-        thres * thres)
+        min_range * min_range)
       continue;
     cloud_out.points[j] = cloud_in.points[i];
     j++;
@@ -105,31 +111,27 @@ void removeClosedPointCloud(const pcl::PointCloud<PointT> &cloud_in,
   cloud_out.is_dense = true;
 }
 
-void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg) {
-  if (!systemInited) {
-    systemInitCount++;
-    if (systemInitCount >= systemDelay) {
-      systemInited = true;
-    } else
-      return;
-  }
+void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
+  g_cloud_index_curr++;
 
   TicToc t_whole;
   TicToc t_prepare;
-  std::vector<int> scanStartInd(N_SCANS, 0);
-  std::vector<int> scanEndInd(N_SCANS, 0);
+  std::vector<int> scan_start_indices(g_scan_num, 0);
+  std::vector<int> scan_end_indices(g_scan_num, 0);
 
-  pcl::PointCloud<pcl::PointXYZ> laserCloudIn;
-  pcl::fromROSMsg(*laserCloudMsg, laserCloudIn);
+  pcl::PointCloud<pcl::PointXYZ> laser_cloud_in;
+  pcl::fromROSMsg(*laser_cloud_msg, laser_cloud_in);
+
+  // 删除非法点
   std::vector<int> indices;
+  pcl::removeNaNFromPointCloud(laser_cloud_in, laser_cloud_in, indices);
+  RemoveClosePointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
-  pcl::removeNaNFromPointCloud(laserCloudIn, laserCloudIn, indices);
-  removeClosedPointCloud(laserCloudIn, laserCloudIn, MINIMUM_RANGE);
-
-  int cloudSize = laserCloudIn.points.size();
-  float startOri = -atan2(laserCloudIn.points[0].y, laserCloudIn.points[0].x);
-  float endOri = -atan2(laserCloudIn.points[cloudSize - 1].y,
-                        laserCloudIn.points[cloudSize - 1].x) +
+  int cloudSize = laser_cloud_in.points.size();
+  float startOri =
+      -atan2(laser_cloud_in.points[0].y, laser_cloud_in.points[0].x);
+  float endOri = -atan2(laser_cloud_in.points[cloudSize - 1].y,
+                        laser_cloud_in.points[cloudSize - 1].x) +
                  2 * M_PI;
 
   if (endOri - startOri > 3 * M_PI) {
@@ -142,33 +144,34 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg) {
   bool halfPassed = false;
   int count = cloudSize;
   PointType point;
-  std::vector<pcl::PointCloud<PointType>> laserCloudScans(N_SCANS);
+  std::vector<pcl::PointCloud<PointType>> laserCloudScans(g_scan_num);
   for (int i = 0; i < cloudSize; i++) {
-    point.x = laserCloudIn.points[i].x;
-    point.y = laserCloudIn.points[i].y;
-    point.z = laserCloudIn.points[i].z;
+    point.x = laser_cloud_in.points[i].x;
+    point.y = laser_cloud_in.points[i].y;
+    point.z = laser_cloud_in.points[i].z;
 
+    // 计算scan_id
     float angle = atan(point.z / sqrt(point.x * point.x + point.y * point.y)) *
                   180 / M_PI;
     int scanID = 0;
 
-    if (N_SCANS == 16) {
+    if (g_scan_num == 16) {
       scanID = int((angle + 15) / 2 + 0.5);
-      if (scanID > (N_SCANS - 1) || scanID < 0) {
+      if (scanID > (g_scan_num - 1) || scanID < 0) {
         count--;
         continue;
       }
-    } else if (N_SCANS == 32) {
+    } else if (g_scan_num == 32) {
       scanID = int((angle + 92.0 / 3.0) * 3.0 / 4.0);
-      if (scanID > (N_SCANS - 1) || scanID < 0) {
+      if (scanID > (g_scan_num - 1) || scanID < 0) {
         count--;
         continue;
       }
-    } else if (N_SCANS == 64) {
+    } else if (g_scan_num == 64) {
       if (angle >= -8.83)
         scanID = int((2 - angle) * 3.0 + 0.5);
       else
-        scanID = N_SCANS / 2 + int((-8.83 - angle) * 2.0 + 0.5);
+        scanID = g_scan_num / 2 + int((-8.83 - angle) * 2.0 + 0.5);
 
       // use [0 50]  > 50 remove outlies
       if (angle > 2 || angle < -24.33 || scanID > 50 || scanID < 0) {
@@ -176,11 +179,10 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg) {
         continue;
       }
     } else {
-      printf("wrong scan number\n");
-      ROS_BREAK();
+      LOG(FATAL) << "Wrong scan number:" << g_scan_num;
     }
-    // printf("angle %f scanID %d \n", angle, scanID);
 
+    // TODO
     float ori = -atan2(point.y, point.x);
     if (!halfPassed) {
       if (ori < startOri - M_PI / 2) {
@@ -201,164 +203,158 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg) {
       }
     }
 
+    // 密度的整数部分为scan_id，浮点部分为点在当前帧的时间偏移
     float relTime = (ori - startOri) / (endOri - startOri);
-    point.intensity = scanID + scanPeriod * relTime;
+    point.intensity = scanID + kScanPeriod * relTime;
     laserCloudScans[scanID].push_back(point);
   }
+  LOG_IF(WARNING, cloudSize - count > 10)
+      << "More than 10 invalid points: no matching scan id!!";
 
   cloudSize = count;
-  printf("points size %d \n", cloudSize);
+  LOG(INFO) << "Cloud size: " << cloudSize;
 
-  pcl::PointCloud<PointType>::Ptr laserCloud(new pcl::PointCloud<PointType>());
-  for (int i = 0; i < N_SCANS; i++) {
-    scanStartInd[i] = laserCloud->size() + 5;
-    *laserCloud += laserCloudScans[i];
-    scanEndInd[i] = laserCloud->size() - 6;
+  pcl::PointCloud<PointType>::Ptr laser_cloud(new pcl::PointCloud<PointType>());
+  for (int i = 0; i < g_scan_num; i++) {
+    scan_start_indices[i] = laser_cloud->size() + 5;
+    *laser_cloud += laserCloudScans[i];
+    scan_end_indices[i] = laser_cloud->size() - 6;
   }
 
-  printf("prepare time %f \n", t_prepare.toc());
+  LOG_STEP_TIME("Re-index scans", t_prepare.toc());
 
+  /**
+   * @brief 计算所有点的曲率
+   *
+   * dx(i) = x[i-5]+x[i-4]+...+x[i+5]-10*x[i]
+   * ...
+   * curv(i) = dx(i)^2 + dy(i)^2 + dz(i)^2
+   */
   for (int i = 5; i < cloudSize - 5; i++) {
-    float diffX = laserCloud->points[i - 5].x + laserCloud->points[i - 4].x +
-                  laserCloud->points[i - 3].x + laserCloud->points[i - 2].x +
-                  laserCloud->points[i - 1].x - 10 * laserCloud->points[i].x +
-                  laserCloud->points[i + 1].x + laserCloud->points[i + 2].x +
-                  laserCloud->points[i + 3].x + laserCloud->points[i + 4].x +
-                  laserCloud->points[i + 5].x;
-    float diffY = laserCloud->points[i - 5].y + laserCloud->points[i - 4].y +
-                  laserCloud->points[i - 3].y + laserCloud->points[i - 2].y +
-                  laserCloud->points[i - 1].y - 10 * laserCloud->points[i].y +
-                  laserCloud->points[i + 1].y + laserCloud->points[i + 2].y +
-                  laserCloud->points[i + 3].y + laserCloud->points[i + 4].y +
-                  laserCloud->points[i + 5].y;
-    float diffZ = laserCloud->points[i - 5].z + laserCloud->points[i - 4].z +
-                  laserCloud->points[i - 3].z + laserCloud->points[i - 2].z +
-                  laserCloud->points[i - 1].z - 10 * laserCloud->points[i].z +
-                  laserCloud->points[i + 1].z + laserCloud->points[i + 2].z +
-                  laserCloud->points[i + 3].z + laserCloud->points[i + 4].z +
-                  laserCloud->points[i + 5].z;
+    float diffX = laser_cloud->points[i - 5].x + laser_cloud->points[i - 4].x +
+                  laser_cloud->points[i - 3].x + laser_cloud->points[i - 2].x +
+                  laser_cloud->points[i - 1].x - 10 * laser_cloud->points[i].x +
+                  laser_cloud->points[i + 1].x + laser_cloud->points[i + 2].x +
+                  laser_cloud->points[i + 3].x + laser_cloud->points[i + 4].x +
+                  laser_cloud->points[i + 5].x;
+    float diffY = laser_cloud->points[i - 5].y + laser_cloud->points[i - 4].y +
+                  laser_cloud->points[i - 3].y + laser_cloud->points[i - 2].y +
+                  laser_cloud->points[i - 1].y - 10 * laser_cloud->points[i].y +
+                  laser_cloud->points[i + 1].y + laser_cloud->points[i + 2].y +
+                  laser_cloud->points[i + 3].y + laser_cloud->points[i + 4].y +
+                  laser_cloud->points[i + 5].y;
+    float diffZ = laser_cloud->points[i - 5].z + laser_cloud->points[i - 4].z +
+                  laser_cloud->points[i - 3].z + laser_cloud->points[i - 2].z +
+                  laser_cloud->points[i - 1].z - 10 * laser_cloud->points[i].z +
+                  laser_cloud->points[i + 1].z + laser_cloud->points[i + 2].z +
+                  laser_cloud->points[i + 3].z + laser_cloud->points[i + 4].z +
+                  laser_cloud->points[i + 5].z;
 
-    cloudCurvature[i] = diffX * diffX + diffY * diffY + diffZ * diffZ;
-    cloudSortInd[i] = i;
-    cloudNeighborPicked[i] = 0;
-    cloudLabel[i] = 0;
+    g_cloud_curvatures[i] = diffX * diffX + diffY * diffY + diffZ * diffZ;
+    g_cloud_sorted_indices[i] = i;
+    g_is_cloud_neighbor_picked[i] = false;
+    g_cloud_labels[i] = P_UNKNOWN;
   }
 
   TicToc t_pts;
 
-  pcl::PointCloud<PointType> cornerPointsSharp;
-  pcl::PointCloud<PointType> cornerPointsLessSharp;
-  pcl::PointCloud<PointType> surfPointsFlat;
-  pcl::PointCloud<PointType> surfPointsLessFlat;
+  pcl::PointCloud<PointType> corner_sharp_cloud;       // sharp 点
+  pcl::PointCloud<PointType> corner_less_sharp_cloud;  // less sharp 点
+  pcl::PointCloud<PointType> surf_flat_cloud;          // flat 点
+  pcl::PointCloud<PointType> surf_less_flat_cloud;     // less flat 点
 
   float t_q_sort = 0;
-  for (int i = 0; i < N_SCANS; i++) {
-    if (scanEndInd[i] - scanStartInd[i] < 6) continue;
+  // 提取每帧扫描线中的特征点
+  for (int i = 0; i < g_scan_num; i++) {
+    if (scan_end_indices[i] - scan_start_indices[i] < 6) continue;
     pcl::PointCloud<PointType>::Ptr surfPointsLessFlatScan(
         new pcl::PointCloud<PointType>);
+    // 将每条扫描线分成6片，对每片提取特征点
     for (int j = 0; j < 6; j++) {
-      int sp = scanStartInd[i] + (scanEndInd[i] - scanStartInd[i]) * j / 6;
-      int ep =
-          scanStartInd[i] + (scanEndInd[i] - scanStartInd[i]) * (j + 1) / 6 - 1;
+      int sp = scan_start_indices[i] +
+               (scan_end_indices[i] - scan_start_indices[i]) * j / 6;
+      int ep = scan_start_indices[i] +
+               (scan_end_indices[i] - scan_start_indices[i]) * (j + 1) / 6 - 1;
 
       TicToc t_tmp;
-      std::sort(cloudSortInd + sp, cloudSortInd + ep + 1, comp);
+      // 对每片点云中的曲率排序
+      std::sort(g_cloud_sorted_indices.begin() + sp,
+                g_cloud_sorted_indices.begin() + ep + 1,
+                [](int i, int j) -> bool {
+                  return g_cloud_curvatures[i] < g_cloud_curvatures[j];
+                });
       t_q_sort += t_tmp.toc();
 
-      int largestPickedNum = 0;
+      // 取曲率最高的前2个点为sharp点，前20个为less_sharp点（每次选取时标记周围的十一个点）
+      int largest_picked_num = 0;
       for (int k = ep; k >= sp; k--) {
-        int ind = cloudSortInd[k];
+        int ind = g_cloud_sorted_indices[k];
 
-        if (cloudNeighborPicked[ind] == 0 && cloudCurvature[ind] > 0.1) {
-          largestPickedNum++;
-          if (largestPickedNum <= 2) {
-            cloudLabel[ind] = 2;
-            cornerPointsSharp.push_back(laserCloud->points[ind]);
-            cornerPointsLessSharp.push_back(laserCloud->points[ind]);
-          } else if (largestPickedNum <= 20) {
-            cloudLabel[ind] = 1;
-            cornerPointsLessSharp.push_back(laserCloud->points[ind]);
+        if (!g_is_cloud_neighbor_picked[ind] && g_cloud_curvatures[ind] > 0.1) {
+          largest_picked_num++;
+          if (largest_picked_num <= 2) {
+            g_cloud_labels[ind] = P_SHARP;
+            corner_sharp_cloud.push_back(laser_cloud->points[ind]);
+            corner_less_sharp_cloud.push_back(laser_cloud->points[ind]);
+          } else if (largest_picked_num <= 20) {
+            g_cloud_labels[ind] = P_LESS_SHARP;
+            corner_less_sharp_cloud.push_back(laser_cloud->points[ind]);
           } else {
             break;
           }
 
-          cloudNeighborPicked[ind] = 1;
-
+          // 标记临近点
+          g_is_cloud_neighbor_picked[ind] = true;
           for (int l = 1; l <= 5; l++) {
-            float diffX = laserCloud->points[ind + l].x -
-                          laserCloud->points[ind + l - 1].x;
-            float diffY = laserCloud->points[ind + l].y -
-                          laserCloud->points[ind + l - 1].y;
-            float diffZ = laserCloud->points[ind + l].z -
-                          laserCloud->points[ind + l - 1].z;
-            if (diffX * diffX + diffY * diffY + diffZ * diffZ > 0.05) {
-              break;
-            }
-
-            cloudNeighborPicked[ind + l] = 1;
+            auto vec = laser_cloud->points[ind + l].getVector3fMap() -
+                       laser_cloud->points[ind + l - 1].getVector3fMap();
+            if (vec.squaredNorm() > 0.05) break;
+            g_is_cloud_neighbor_picked[ind + l] = true;
           }
           for (int l = -1; l >= -5; l--) {
-            float diffX = laserCloud->points[ind + l].x -
-                          laserCloud->points[ind + l + 1].x;
-            float diffY = laserCloud->points[ind + l].y -
-                          laserCloud->points[ind + l + 1].y;
-            float diffZ = laserCloud->points[ind + l].z -
-                          laserCloud->points[ind + l + 1].z;
-            if (diffX * diffX + diffY * diffY + diffZ * diffZ > 0.05) {
-              break;
-            }
-
-            cloudNeighborPicked[ind + l] = 1;
+            auto vec = laser_cloud->points[ind + l].getVector3fMap() -
+                       laser_cloud->points[ind + l + 1].getVector3fMap();
+            if (vec.squaredNorm() > 0.05) break;
+            g_is_cloud_neighbor_picked[ind + l] = true;
           }
         }
       }
 
-      int smallestPickedNum = 0;
+      // 取曲率最低的前4个点为flat点（每次选取时标记周围的十一个点）
+      int smallest_picked_num = 0;
       for (int k = sp; k <= ep; k++) {
-        int ind = cloudSortInd[k];
+        int ind = g_cloud_sorted_indices[k];
 
-        if (cloudNeighborPicked[ind] == 0 && cloudCurvature[ind] < 0.1) {
-          cloudLabel[ind] = -1;
-          surfPointsFlat.push_back(laserCloud->points[ind]);
+        if (!g_is_cloud_neighbor_picked[ind] && g_cloud_curvatures[ind] < 0.1) {
+          g_cloud_labels[ind] = P_FLAT;
+          surf_flat_cloud.push_back(laser_cloud->points[ind]);
 
-          smallestPickedNum++;
-          if (smallestPickedNum >= 4) {
+          smallest_picked_num++;
+          if (smallest_picked_num >= 4) {
             break;
           }
 
-          cloudNeighborPicked[ind] = 1;
+          // 标记临近点
+          g_is_cloud_neighbor_picked[ind] = true;
           for (int l = 1; l <= 5; l++) {
-            float diffX = laserCloud->points[ind + l].x -
-                          laserCloud->points[ind + l - 1].x;
-            float diffY = laserCloud->points[ind + l].y -
-                          laserCloud->points[ind + l - 1].y;
-            float diffZ = laserCloud->points[ind + l].z -
-                          laserCloud->points[ind + l - 1].z;
-            if (diffX * diffX + diffY * diffY + diffZ * diffZ > 0.05) {
-              break;
-            }
-
-            cloudNeighborPicked[ind + l] = 1;
+            auto vec = laser_cloud->points[ind + l].getVector3fMap() -
+                       laser_cloud->points[ind + l - 1].getVector3fMap();
+            if (vec.squaredNorm() > 0.05) break;
+            g_is_cloud_neighbor_picked[ind + l] = true;
           }
           for (int l = -1; l >= -5; l--) {
-            float diffX = laserCloud->points[ind + l].x -
-                          laserCloud->points[ind + l + 1].x;
-            float diffY = laserCloud->points[ind + l].y -
-                          laserCloud->points[ind + l + 1].y;
-            float diffZ = laserCloud->points[ind + l].z -
-                          laserCloud->points[ind + l + 1].z;
-            if (diffX * diffX + diffY * diffY + diffZ * diffZ > 0.05) {
-              break;
-            }
-
-            cloudNeighborPicked[ind + l] = 1;
+            auto vec = laser_cloud->points[ind + l].getVector3fMap() -
+                       laser_cloud->points[ind + l + 1].getVector3fMap();
+            if (vec.squaredNorm() > 0.05) break;
+            g_is_cloud_neighbor_picked[ind + l] = true;
           }
         }
       }
 
+      // 将flat点和未标记点都标记为less_flat点
       for (int k = sp; k <= ep; k++) {
-        if (cloudLabel[k] <= 0) {
-          surfPointsLessFlatScan->push_back(laserCloud->points[k]);
+        if (g_cloud_labels[k] == P_FLAT || g_cloud_labels[k] == P_UNKNOWN) {
+          surfPointsLessFlatScan->push_back(laser_cloud->points[k]);
         }
       }
     }
@@ -369,99 +365,80 @@ void laserCloudHandler(const sensor_msgs::PointCloud2ConstPtr &laserCloudMsg) {
     downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
     downSizeFilter.filter(surfPointsLessFlatScanDS);
 
-    surfPointsLessFlat += surfPointsLessFlatScanDS;
+    surf_less_flat_cloud += surfPointsLessFlatScanDS;
   }
-  printf("sort q time %f \n", t_q_sort);
-  printf("seperate points time %f \n", t_pts.toc());
+  LOG_STEP_TIME("Curvature sort", t_q_sort);
+  LOG_STEP_TIME("Seperate points", t_pts.toc());
 
-  sensor_msgs::PointCloud2 laserCloudOutMsg;
-  pcl::toROSMsg(*laserCloud, laserCloudOutMsg);
-  laserCloudOutMsg.header.stamp = laserCloudMsg->header.stamp;
-  laserCloudOutMsg.header.frame_id = "/camera_init";
-  pubLaserCloud.publish(laserCloudOutMsg);
+  sensor_msgs::PointCloud2 laser_cloud_out_msg;
+  pcl::toROSMsg(*laser_cloud, laser_cloud_out_msg);
+  laser_cloud_out_msg.header.stamp = laser_cloud_msg->header.stamp;
+  laser_cloud_out_msg.header.frame_id = "/camera_init";
+  g_cloud_publisher.publish(laser_cloud_out_msg);
 
-  sensor_msgs::PointCloud2 cornerPointsSharpMsg;
-  pcl::toROSMsg(cornerPointsSharp, cornerPointsSharpMsg);
-  cornerPointsSharpMsg.header.stamp = laserCloudMsg->header.stamp;
-  cornerPointsSharpMsg.header.frame_id = "/camera_init";
-  pubCornerPointsSharp.publish(cornerPointsSharpMsg);
+  sensor_msgs::PointCloud2 corner_sharp_cloud_msg;
+  pcl::toROSMsg(corner_sharp_cloud, corner_sharp_cloud_msg);
+  corner_sharp_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
+  corner_sharp_cloud_msg.header.frame_id = "/camera_init";
+  g_corner_cloud_publisher.publish(corner_sharp_cloud_msg);
 
-  sensor_msgs::PointCloud2 cornerPointsLessSharpMsg;
-  pcl::toROSMsg(cornerPointsLessSharp, cornerPointsLessSharpMsg);
-  cornerPointsLessSharpMsg.header.stamp = laserCloudMsg->header.stamp;
-  cornerPointsLessSharpMsg.header.frame_id = "/camera_init";
-  pubCornerPointsLessSharp.publish(cornerPointsLessSharpMsg);
+  sensor_msgs::PointCloud2 corner_less_sharp_cloud_msg;
+  pcl::toROSMsg(corner_less_sharp_cloud, corner_less_sharp_cloud_msg);
+  corner_less_sharp_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
+  corner_less_sharp_cloud_msg.header.frame_id = "/camera_init";
+  g_corner_less_cloud_publisher.publish(corner_less_sharp_cloud_msg);
 
-  sensor_msgs::PointCloud2 surfPointsFlat2;
-  pcl::toROSMsg(surfPointsFlat, surfPointsFlat2);
-  surfPointsFlat2.header.stamp = laserCloudMsg->header.stamp;
-  surfPointsFlat2.header.frame_id = "/camera_init";
-  pubSurfPointsFlat.publish(surfPointsFlat2);
+  sensor_msgs::PointCloud2 surf_flat_cloud_msg;
+  pcl::toROSMsg(surf_flat_cloud, surf_flat_cloud_msg);
+  surf_flat_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
+  surf_flat_cloud_msg.header.frame_id = "/camera_init";
+  g_surf_cloud_publisher.publish(surf_flat_cloud_msg);
 
-  sensor_msgs::PointCloud2 surfPointsLessFlat2;
-  pcl::toROSMsg(surfPointsLessFlat, surfPointsLessFlat2);
-  surfPointsLessFlat2.header.stamp = laserCloudMsg->header.stamp;
-  surfPointsLessFlat2.header.frame_id = "/camera_init";
-  pubSurfPointsLessFlat.publish(surfPointsLessFlat2);
+  sensor_msgs::PointCloud2 surf_less_flat_cloud_msg;
+  pcl::toROSMsg(surf_less_flat_cloud, surf_less_flat_cloud_msg);
+  surf_less_flat_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
+  surf_less_flat_cloud_msg.header.frame_id = "/camera_init";
+  g_surf_less_cloud_publisher.publish(surf_less_flat_cloud_msg);
 
-  // pub each scam
-  if (PUB_EACH_LINE) {
-    for (int i = 0; i < N_SCANS; i++) {
-      sensor_msgs::PointCloud2 scanMsg;
-      pcl::toROSMsg(laserCloudScans[i], scanMsg);
-      scanMsg.header.stamp = laserCloudMsg->header.stamp;
-      scanMsg.header.frame_id = "/camera_init";
-      pubEachScan[i].publish(scanMsg);
-    }
-  }
-
-  printf("scan registration time %f ms *************\n", t_whole.toc());
-  if (t_whole.toc() > 100) ROS_WARN("scan registration process over 100ms");
+  LOG_STEP_TIME("Scan registration", t_whole.toc());
+  LOG_IF(WARNING, t_whole.toc() > 100)
+      << "Scan registration process over 100ms";
 }
 
 int main(int argc, char **argv) {
+  FLAGS_logtostderr = true;
+  google::InitGoogleLogging(argv[0]);
+  google::ParseCommandLineFlags(&argc, &argv, true);
+
   ros::init(argc, argv, "scanRegistration");
   ros::NodeHandle nh;
 
-  nh.param<int>("scan_line", N_SCANS, 16);
+  InitBuffer();
 
-  nh.param<double>("minimum_range", MINIMUM_RANGE, 0.1);
+  // 获取ROS参数
+  CHECK(nh.param<int>("scan_line", g_scan_num, 16))
+      << "Get param 'scan_line' failed!!";
+  LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.1))
+      << "Use default minimum range: 0.1";
+  CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
+      << "only support velodyne with 16, 32 or 64 scan line!";
 
-  printf("scan line number %d \n", N_SCANS);
-
-  if (N_SCANS != 16 && N_SCANS != 32 && N_SCANS != 64) {
-    printf("only support velodyne with 16, 32 or 64 scan line!");
-    return 0;
-  }
-
+  // 注册订阅器和发布器
   ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/velodyne_points", 100, laserCloudHandler);
-
-  pubLaserCloud =
+      "/velodyne_points", 10, HandleLaserCloud);
+  g_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 100);
-
-  pubCornerPointsSharp =
+  g_corner_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 100);
-
-  pubCornerPointsLessSharp =
+  g_corner_less_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 100);
-
-  pubSurfPointsFlat =
+  g_surf_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_flat", 100);
-
-  pubSurfPointsLessFlat =
+  g_surf_less_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 100);
-
-  pubRemovePoints =
+  g_removed_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_remove_points", 100);
 
-  if (PUB_EACH_LINE) {
-    for (int i = 0; i < N_SCANS; i++) {
-      ros::Publisher tmp = nh.advertise<sensor_msgs::PointCloud2>(
-          "/laser_scanid_" + std::to_string(i), 100);
-      pubEachScan.push_back(tmp);
-    }
-  }
   ros::spin();
 
   return 0;
