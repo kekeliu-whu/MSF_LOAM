@@ -39,7 +39,6 @@
 #include <nav_msgs/Path.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -62,11 +61,11 @@ int g_skip_frame_num = 5;
 bool g_is_system_inited = false;
 
 // less sharp 点构造的 kdtree
-pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeCornerLast(
-    new pcl::KdTreeFLANN<pcl::PointXYZI>());
+pcl::KdTreeFLANN<PointType>::Ptr kdtreeCornerLast(
+    new pcl::KdTreeFLANN<PointType>());
 // less flat 点构造的 kdtree
-pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeSurfLast(
-    new pcl::KdTreeFLANN<pcl::PointXYZI>());
+pcl::KdTreeFLANN<PointType>::Ptr kdtreeSurfLast(
+    new pcl::KdTreeFLANN<PointType>());
 
 pcl::PointCloud<PointType>::Ptr cloud_corner_sharp(
     new pcl::PointCloud<PointType>());
@@ -102,42 +101,42 @@ std::queue<sensor_msgs::PointCloud2ConstPtr> surfLessFlatBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> fullPointsBuf;
 
 // undistort lidar point
-void TransformToStart(PointType const *const pi, PointType *const po) {
+void TransformToStart(const PointType &pi, PointType &po) {
   // interpolation ratio
   double s;
   if (DISTORTION)
-    s = (pi->intensity - int(pi->intensity)) / kScanPeriod;
+    s = (pi.intensity - int(pi.intensity)) / kScanPeriod;
   else
     s = 1.0;
   // s = 1;
   Eigen::Quaterniond q_point_last =
       Eigen::Quaterniond::Identity().slerp(s, g_r_curr2last);
   Eigen::Vector3d t_point_last = s * g_t_curr2last;
-  Eigen::Vector3d point(pi->x, pi->y, pi->z);
+  Eigen::Vector3d point(pi.x, pi.y, pi.z);
   Eigen::Vector3d un_point = q_point_last * point + t_point_last;
 
-  po->x = un_point.x();
-  po->y = un_point.y();
-  po->z = un_point.z();
-  po->intensity = pi->intensity;
+  po.x = un_point.x();
+  po.y = un_point.y();
+  po.z = un_point.z();
+  po.intensity = pi.intensity;
 }
 
 // transform all lidar points to the start of the next frame
-void TransformToEnd(PointType const *const pi, PointType *const po) {
+void TransformToEnd(const PointType &pi, PointType &po) {
   // undistort point first
-  pcl::PointXYZI un_point_tmp;
-  TransformToStart(pi, &un_point_tmp);
+  PointType un_point_tmp;
+  TransformToStart(pi, un_point_tmp);
 
   Eigen::Vector3d un_point(un_point_tmp.x, un_point_tmp.y, un_point_tmp.z);
   Eigen::Vector3d point_end =
       g_r_curr2last.inverse() * (un_point - g_t_curr2last);
 
-  po->x = point_end.x();
-  po->y = point_end.y();
-  po->z = point_end.z();
+  po.x = point_end.x();
+  po.y = point_end.y();
+  po.z = point_end.z();
 
   // Remove distortion time info
-  po->intensity = int(pi->intensity);
+  po.intensity = int(pi.intensity);
 }
 
 void HandleCloudSharpMsg(
@@ -253,11 +252,8 @@ int main(int argc, char **argv) {
     // initializing
     if (!g_is_system_inited) {
       g_is_system_inited = true;
-      std::cout << "Initialization finished \n";
+      LOG(INFO) << "Initailizing ...";
     } else {
-      int cornerPointsSharpNum = cloud_corner_sharp->points.size();
-      int surfPointsFlatNum = cloud_surf_flat->points.size();
-
       TicToc t_opt;
 
       for (size_t opti_counter = 0; opti_counter < 2; ++opti_counter) {
@@ -274,14 +270,14 @@ int main(int argc, char **argv) {
                                   q_parameterization);
         problem.AddParameterBlock(g_t_curr2last.data(), 3);
 
-        pcl::PointXYZI pointSel;
+        PointType pointSel;
         std::vector<int> pointSearchInd;
         std::vector<float> pointSearchSqDis;
 
         TicToc t_data;
         // find correspondence for corner features
-        for (int i = 0; i < cornerPointsSharpNum; ++i) {
-          TransformToStart(&(cloud_corner_sharp->points[i]), &pointSel);
+        for (int i = 0; i < cloud_corner_sharp->size(); ++i) {
+          TransformToStart(cloud_corner_sharp->points[i], pointSel);
           kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                            pointSearchSqDis);
 
@@ -294,7 +290,7 @@ int main(int argc, char **argv) {
             double minPointSqDis2 = kDistanceSqThreshold;
             // search in the direction of increasing scan line
             for (int j = closestPointInd + 1;
-                 j < (int)cloud_corner_last->points.size(); ++j) {
+                 j < (int)cloud_corner_last->size(); ++j) {
               // if in the same scan line, continue
               if (int(cloud_corner_last->points[j].intensity) <=
                   closestPointScanID)
@@ -379,8 +375,8 @@ int main(int argc, char **argv) {
         }
 
         // find correspondence for plane features
-        for (int i = 0; i < surfPointsFlatNum; ++i) {
-          TransformToStart(&(cloud_surf_flat->points[i]), &pointSel);
+        for (int i = 0; i < cloud_surf_flat->size(); ++i) {
+          TransformToStart(cloud_surf_flat->points[i], pointSel);
           kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                          pointSearchSqDis);
 
@@ -395,8 +391,8 @@ int main(int argc, char **argv) {
                    minPointSqDis3 = kDistanceSqThreshold;
 
             // search in the direction of increasing scan line
-            for (int j = closestPointInd + 1;
-                 j < (int)cloud_surf_last->points.size(); ++j) {
+            for (size_t j = closestPointInd + 1; j < cloud_surf_last->size();
+                 ++j) {
               // if not in nearby scans, end the loop
               if (int(cloud_surf_last->points[j].intensity) >
                   (closestPointScanID + kNearByScan))
@@ -542,22 +538,22 @@ int main(int argc, char **argv) {
 
     // transform corner features and plane features to the scan end point
     if (0) {
-      int cornerPointsLessSharpNum = cloud_corner_less_sharp->points.size();
+      int cornerPointsLessSharpNum = cloud_corner_less_sharp->size();
       for (int i = 0; i < cornerPointsLessSharpNum; i++) {
-        TransformToEnd(&cloud_corner_less_sharp->points[i],
-                       &cloud_corner_less_sharp->points[i]);
+        TransformToEnd(cloud_corner_less_sharp->points[i],
+                       cloud_corner_less_sharp->points[i]);
       }
 
-      int surfPointsLessFlatNum = cloud_surf_less_flat->points.size();
+      int surfPointsLessFlatNum = cloud_surf_less_flat->size();
       for (int i = 0; i < surfPointsLessFlatNum; i++) {
-        TransformToEnd(&cloud_surf_less_flat->points[i],
-                       &cloud_surf_less_flat->points[i]);
+        TransformToEnd(cloud_surf_less_flat->points[i],
+                       cloud_surf_less_flat->points[i]);
       }
 
-      int laserCloudFullResNum = laserCloudFullRes->points.size();
+      int laserCloudFullResNum = laserCloudFullRes->size();
       for (int i = 0; i < laserCloudFullResNum; i++) {
-        TransformToEnd(&laserCloudFullRes->points[i],
-                       &laserCloudFullRes->points[i]);
+        TransformToEnd(laserCloudFullRes->points[i],
+                       laserCloudFullRes->points[i]);
       }
     }
 
