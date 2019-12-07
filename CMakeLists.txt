@@ -35,14 +35,14 @@ catkin_package(
 )
 
 
-add_executable(ascanRegistration loam_velodyne/slam/scanRegistration.cpp)
+add_executable(ascanRegistration loam_velodyne/slam/scan_registration.cc)
 target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} glog gflags)
 
-add_executable(alaserOdometry loam_velodyne/slam/laserOdometry.cpp)
+add_executable(alaserOdometry loam_velodyne/slam/laser_odometry.cc)
 target_link_libraries(alaserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
-add_executable(alaserMapping loam_velodyne/slam/laserMapping.cpp)
+add_executable(alaserMapping loam_velodyne/slam/laser_mapping.cc)
 target_link_libraries(alaserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
-add_executable(kittiHelper loam_velodyne/slam/kittiHelper.cpp)
+add_executable(kittiHelper loam_velodyne/slam/kitti_helper.cc)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})

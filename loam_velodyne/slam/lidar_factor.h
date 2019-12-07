@@ -1,6 +1,8 @@
 // Author:   Tong Qin               qintonguav@gmail.com
 // 	         Shaozu Cao 		    saozu.cao@connect.ust.hk
 
+#pragma once
+
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 #include <pcl/kdtree/kdtree_flann.h>

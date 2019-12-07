@@ -45,7 +45,7 @@
 #include <Eigen/Eigen>
 #include <queue>
 
-#include "lidarFactor.hpp"
+#include "lidar_factor.h"
 #include "loam_velodyne/common/common.h"
 #include "loam_velodyne/common/tic_toc.h"
 
