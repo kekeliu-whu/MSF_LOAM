@@ -38,4 +38,6 @@
 
 #include <pcl/point_types.h>
 
+#define DISTORTION 0
+
 using PointType = pcl::PointXYZI;

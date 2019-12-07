@@ -28,4 +28,5 @@ class TicToc {
   TimePoint end_;
 };
 
-#define LOG_STEP_TIME(describe, msecs) LOG(INFO) << describe << ": " << msecs << " ms"
+#define LOG_STEP_TIME(describe, msecs) \
+  LOG(INFO) << describe << ": " << msecs << " ms"

@@ -21,7 +21,8 @@ find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
 
 include_directories(
-  .
+  include
+  src
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
@@ -35,14 +36,14 @@ catkin_package(
 )
 
 
-add_executable(ascanRegistration loam_velodyne/slam/scan_registration.cc)
+add_executable(ascanRegistration src/slam/scan_registration.cc)
 target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} glog gflags)
 
-add_executable(alaserOdometry loam_velodyne/slam/laser_odometry.cc)
+add_executable(alaserOdometry src/slam/laser_odometry.cc src/slam/scan_matching/odometry_scan_matcher.cc)
 target_link_libraries(alaserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
-add_executable(alaserMapping loam_velodyne/slam/laser_mapping.cc)
+add_executable(alaserMapping src/slam/laser_mapping.cc)
 target_link_libraries(alaserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
-add_executable(kittiHelper loam_velodyne/slam/kitti_helper.cc)
+add_executable(kittiHelper src/slam/kitti_helper.cc)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
