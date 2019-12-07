@@ -34,10 +34,8 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <aloam_velodyne/common.h>
 #include <ceres/ceres.h>
 #include <geometry_msgs/PoseStamped.h>
-#include <math.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
@@ -48,14 +46,16 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
+#include <cmath>
 #include <eigen3/Eigen/Dense>
 #include <queue>
 #include <string>
 #include <thread>
 #include <vector>
 
-#include "aloam_velodyne/tic_toc.h"
 #include "lidarFactor.hpp"
+#include "loam_velodyne/common/common.h"
+#include "loam_velodyne/common/tic_toc.h"
 
 int frameCount = 0;
 
@@ -71,8 +71,7 @@ const int laserCloudWidth = 21;
 const int laserCloudHeight = 21;
 const int laserCloudDepth = 11;
 
-const int laserCloudNum =
-    laserCloudWidth * laserCloudHeight * laserCloudDepth;  // 4851
+const int laserCloudNum = laserCloudWidth * laserCloudHeight * laserCloudDepth;
 
 int laserCloudValidInd[125];
 int laserCloudSurroundInd[125];
