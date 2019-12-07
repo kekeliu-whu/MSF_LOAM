@@ -53,9 +53,9 @@
 #include <thread>
 #include <vector>
 
-#include "lidar_factor.h"
-#include "loam_velodyne/common/common.h"
-#include "loam_velodyne/common/tic_toc.h"
+#include "common/common.h"
+#include "common/tic_toc.h"
+#include "slam/scan_matching/lidar_factor.h"
 
 int frameCount = 0;
 

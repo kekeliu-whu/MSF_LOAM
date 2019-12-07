@@ -46,8 +46,8 @@
 #include <string>
 #include <vector>
 
-#include "loam_velodyne/common/common.h"
-#include "loam_velodyne/common/tic_toc.h"
+#include "common/common.h"
+#include "common/tic_toc.h"
 
 using std::atan2;
 using std::cos;
