@@ -45,9 +45,9 @@
 #include <Eigen/Eigen>
 #include <queue>
 
-#include "aloam_velodyne/common.h"
-#include "aloam_velodyne/tic_toc.h"
 #include "lidarFactor.hpp"
+#include "loam_velodyne/common/common.h"
+#include "loam_velodyne/common/tic_toc.h"
 
 #define DISTORTION 0
 
@@ -252,7 +252,7 @@ int main(int argc, char **argv) {
     // initializing
     if (!g_is_system_inited) {
       g_is_system_inited = true;
-      LOG(INFO) << "Initailizing ...";
+      LOG(INFO) << "Initializing ...";
     } else {
       TicToc t_opt;
 
@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
 
         TicToc t_data;
         // find correspondence for corner features
-        for (int i = 0; i < cloud_corner_sharp->size(); ++i) {
+        for (size_t i = 0; i < cloud_corner_sharp->size(); ++i) {
           TransformToStart(cloud_corner_sharp->points[i], pointSel);
           kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                            pointSearchSqDis);
@@ -343,9 +343,8 @@ int main(int argc, char **argv) {
               }
             }
           }
-          if (minPointInd2 >=
-              0)  // both closestPointInd and minPointInd2 is valid
-          {
+          // both closestPointInd and minPointInd2 is valid
+          if (minPointInd2 >= 0) {
             Eigen::Vector3d curr_point(cloud_corner_sharp->points[i].x,
                                        cloud_corner_sharp->points[i].y,
                                        cloud_corner_sharp->points[i].z);
@@ -375,7 +374,7 @@ int main(int argc, char **argv) {
         }
 
         // find correspondence for plane features
-        for (int i = 0; i < cloud_surf_flat->size(); ++i) {
+        for (size_t i = 0; i < cloud_surf_flat->size(); ++i) {
           TransformToStart(cloud_surf_flat->points[i], pointSel);
           kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd,
                                          pointSearchSqDis);

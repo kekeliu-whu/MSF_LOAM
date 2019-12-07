@@ -16,13 +16,12 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   tf)
 
-#find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
 
 include_directories(
-  include
+  .
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
@@ -36,14 +35,14 @@ catkin_package(
 )
 
 
-add_executable(ascanRegistration src/scanRegistration.cpp)
+add_executable(ascanRegistration loam_velodyne/slam/scanRegistration.cpp)
 target_link_libraries(ascanRegistration ${catkin_LIBRARIES} ${PCL_LIBRARIES} glog gflags)
 
-add_executable(alaserOdometry src/laserOdometry.cpp)
+add_executable(alaserOdometry loam_velodyne/slam/laserOdometry.cpp)
 target_link_libraries(alaserOdometry ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
-add_executable(alaserMapping src/laserMapping.cpp)
+add_executable(alaserMapping loam_velodyne/slam/laserMapping.cpp)
 target_link_libraries(alaserMapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${CERES_LIBRARIES})
 
-add_executable(kittiHelper src/kittiHelper.cpp)
+add_executable(kittiHelper loam_velodyne/slam/kittiHelper.cpp)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})

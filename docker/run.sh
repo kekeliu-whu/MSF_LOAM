@@ -29,7 +29,7 @@ roscore &
 ROSCORE_PID=$!
 sleep 1
 
-rviz -d ../rviz_cfg/aloam_velodyne.rviz &
+rviz -d ../rviz_cfg/loam_velodyne.rviz &
 RVIZ_PID=$!
 
 A_LOAM_DIR=$(abspath "..")
