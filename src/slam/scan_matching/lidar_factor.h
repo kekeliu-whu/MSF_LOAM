@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ceres/ceres.h>
-#include <Eigen/Dense>
+#include <Eigen/Core>
 
 /**
  * @brief “点-线”距离最小化
