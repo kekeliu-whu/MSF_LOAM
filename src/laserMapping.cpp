@@ -49,7 +49,6 @@
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 #include <eigen3/Eigen/Dense>
-#include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
@@ -108,9 +107,8 @@ pcl::KdTreeFLANN<PointType>::Ptr kdtreeCornerFromMap(
 pcl::KdTreeFLANN<PointType>::Ptr kdtreeSurfFromMap(
     new pcl::KdTreeFLANN<PointType>());
 
-double parameters[7] = {0, 0, 0, 1, 0, 0, 0};
-Eigen::Map<Eigen::Quaterniond> q_w_curr(parameters);
-Eigen::Map<Eigen::Vector3d> t_w_curr(parameters + 4);
+Eigen::Quaterniond q_w_curr(1, 0, 0, 0);
+Eigen::Vector3d t_w_curr(0, 0, 0);
 
 // wmap_T_odom * odom_T_curr = wmap_T_curr;
 // transformation between odom's world and map's world frame
@@ -124,7 +122,6 @@ std::queue<sensor_msgs::PointCloud2ConstPtr> cornerLastBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> surfLastBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> fullResBuf;
 std::queue<nav_msgs::Odometry::ConstPtr> odometryBuf;
-std::mutex mBuf;
 
 pcl::VoxelGrid<PointType> downSizeFilterCorner;
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
@@ -171,30 +168,22 @@ void pointAssociateTobeMapped(PointType const *const pi, PointType *const po) {
 
 void laserCloudCornerLastHandler(
     const sensor_msgs::PointCloud2ConstPtr &laserCloudCornerLast2) {
-  mBuf.lock();
   cornerLastBuf.push(laserCloudCornerLast2);
-  mBuf.unlock();
 }
 
 void laserCloudSurfLastHandler(
     const sensor_msgs::PointCloud2ConstPtr &laserCloudSurfLast2) {
-  mBuf.lock();
   surfLastBuf.push(laserCloudSurfLast2);
-  mBuf.unlock();
 }
 
 void laserCloudFullResHandler(
     const sensor_msgs::PointCloud2ConstPtr &laserCloudFullRes2) {
-  mBuf.lock();
   fullResBuf.push(laserCloudFullRes2);
-  mBuf.unlock();
 }
 
 // receive odomtry
 void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr &laserOdometry) {
-  mBuf.lock();
   odometryBuf.push(laserOdometry);
-  mBuf.unlock();
 
   // high frequence publish
   Eigen::Quaterniond q_wodom_curr;
@@ -228,13 +217,11 @@ void process() {
   while (1) {
     while (!cornerLastBuf.empty() && !surfLastBuf.empty() &&
            !fullResBuf.empty() && !odometryBuf.empty()) {
-      mBuf.lock();
       while (!odometryBuf.empty() &&
              odometryBuf.front()->header.stamp.toSec() <
                  cornerLastBuf.front()->header.stamp.toSec())
         odometryBuf.pop();
       if (odometryBuf.empty()) {
-        mBuf.unlock();
         break;
       }
 
@@ -243,7 +230,6 @@ void process() {
                  cornerLastBuf.front()->header.stamp.toSec())
         surfLastBuf.pop();
       if (surfLastBuf.empty()) {
-        mBuf.unlock();
         break;
       }
 
@@ -252,7 +238,6 @@ void process() {
                  cornerLastBuf.front()->header.stamp.toSec())
         fullResBuf.pop();
       if (fullResBuf.empty()) {
-        mBuf.unlock();
         break;
       }
 
@@ -268,7 +253,6 @@ void process() {
                timeLaserCloudCornerLast, timeLaserCloudSurfLast,
                timeLaserCloudFullRes, timeLaserOdometry);
         printf("unsync messeage!");
-        mBuf.unlock();
         break;
       }
 
@@ -297,8 +281,6 @@ void process() {
         cornerLastBuf.pop();
         printf("drop lidar frame in mapping for real time performance \n");
       }
-
-      mBuf.unlock();
 
       TicToc t_whole;
 
@@ -588,8 +570,9 @@ void process() {
           ceres::Problem::Options problem_options;
 
           ceres::Problem problem(problem_options);
-          problem.AddParameterBlock(parameters, 4, q_parameterization);
-          problem.AddParameterBlock(parameters + 4, 3);
+          problem.AddParameterBlock(q_w_curr.coeffs().data(), 4,
+                                    q_parameterization);
+          problem.AddParameterBlock(t_w_curr.data(), 3);
 
           TicToc t_data;
           int corner_num = 0;
@@ -637,7 +620,8 @@ void process() {
                 ceres::CostFunction *cost_function =
                     LidarEdgeFactor::Create(curr_point, point_a, point_b, 1.0);
                 problem.AddResidualBlock(cost_function, loss_function,
-                                         parameters, parameters + 4);
+                                         q_w_curr.coeffs().data(),
+                                         t_w_curr.data());
                 corner_num++;
               }
             }
@@ -713,7 +697,8 @@ void process() {
                     LidarPlaneNormFactor::Create(curr_point, norm,
                                                  negative_OA_dot_norm);
                 problem.AddResidualBlock(cost_function, loss_function,
-                                         parameters, parameters + 4);
+                                         q_w_curr.coeffs().data(),
+                                         t_w_curr.data());
                 surf_num++;
               }
             }

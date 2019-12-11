@@ -34,6 +34,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <gflags/gflags.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -104,7 +105,8 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
   cloud_out.is_dense = true;
 }
 
-void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
+void HandleLaserCloudMsg(
+    const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
   g_cloud_index_curr++;
 
   TicToc t_whole;
@@ -251,10 +253,10 @@ void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
 
   TicToc t_pts;
 
-  pcl::PointCloud<PointType> corner_sharp_cloud;       // sharp 点
-  pcl::PointCloud<PointType> corner_less_sharp_cloud;  // less sharp 点
-  pcl::PointCloud<PointType> surf_flat_cloud;          // flat 点
-  pcl::PointCloud<PointType> surf_less_flat_cloud;     // less flat 点
+  pcl::PointCloud<PointType> cloud_corner_sharp;       // sharp 点
+  pcl::PointCloud<PointType> cloud_corner_less_sharp;  // less sharp 点
+  pcl::PointCloud<PointType> cloud_surf_flat;          // flat 点
+  pcl::PointCloud<PointType> cloud_surf_less_flat;     // less flat 点
 
   float t_q_sort = 0;
   // 提取每帧扫描线中的特征点
@@ -287,11 +289,11 @@ void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
           largest_picked_num++;
           if (largest_picked_num <= 2) {
             g_cloud_labels[ind] = P_SHARP;
-            corner_sharp_cloud.push_back(laser_cloud->points[ind]);
-            corner_less_sharp_cloud.push_back(laser_cloud->points[ind]);
+            cloud_corner_sharp.push_back(laser_cloud->points[ind]);
+            cloud_corner_less_sharp.push_back(laser_cloud->points[ind]);
           } else if (largest_picked_num <= 20) {
             g_cloud_labels[ind] = P_LESS_SHARP;
-            corner_less_sharp_cloud.push_back(laser_cloud->points[ind]);
+            cloud_corner_less_sharp.push_back(laser_cloud->points[ind]);
           } else {
             break;
           }
@@ -320,7 +322,7 @@ void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
 
         if (!g_is_cloud_neighbor_picked[ind] && g_cloud_curvatures[ind] < 0.1) {
           g_cloud_labels[ind] = P_FLAT;
-          surf_flat_cloud.push_back(laser_cloud->points[ind]);
+          cloud_surf_flat.push_back(laser_cloud->points[ind]);
 
           smallest_picked_num++;
           if (smallest_picked_num >= 4) {
@@ -358,7 +360,7 @@ void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
     downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
     downSizeFilter.filter(surfPointsLessFlatScanDS);
 
-    surf_less_flat_cloud += surfPointsLessFlatScanDS;
+    cloud_surf_less_flat += surfPointsLessFlatScanDS;
   }
   LOG_STEP_TIME("Curvature sort", t_q_sort);
   LOG_STEP_TIME("Seperate points", t_pts.toc());
@@ -369,29 +371,29 @@ void HandleLaserCloud(const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
   laser_cloud_out_msg.header.frame_id = "/aft_mapped";
   g_cloud_publisher.publish(laser_cloud_out_msg);
 
-  sensor_msgs::PointCloud2 corner_sharp_cloud_msg;
-  pcl::toROSMsg(corner_sharp_cloud, corner_sharp_cloud_msg);
-  corner_sharp_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  corner_sharp_cloud_msg.header.frame_id = "/aft_mapped";
-  g_corner_cloud_publisher.publish(corner_sharp_cloud_msg);
+  sensor_msgs::PointCloud2 cloud_corner_sharp_msg;
+  pcl::toROSMsg(cloud_corner_sharp, cloud_corner_sharp_msg);
+  cloud_corner_sharp_msg.header.stamp = laser_cloud_msg->header.stamp;
+  cloud_corner_sharp_msg.header.frame_id = "/aft_mapped";
+  g_corner_cloud_publisher.publish(cloud_corner_sharp_msg);
 
-  sensor_msgs::PointCloud2 corner_less_sharp_cloud_msg;
-  pcl::toROSMsg(corner_less_sharp_cloud, corner_less_sharp_cloud_msg);
-  corner_less_sharp_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  corner_less_sharp_cloud_msg.header.frame_id = "/aft_mapped";
-  g_corner_less_cloud_publisher.publish(corner_less_sharp_cloud_msg);
+  sensor_msgs::PointCloud2 cloud_corner_less_sharp_msg;
+  pcl::toROSMsg(cloud_corner_less_sharp, cloud_corner_less_sharp_msg);
+  cloud_corner_less_sharp_msg.header.stamp = laser_cloud_msg->header.stamp;
+  cloud_corner_less_sharp_msg.header.frame_id = "/aft_mapped";
+  g_corner_less_cloud_publisher.publish(cloud_corner_less_sharp_msg);
 
-  sensor_msgs::PointCloud2 surf_flat_cloud_msg;
-  pcl::toROSMsg(surf_flat_cloud, surf_flat_cloud_msg);
-  surf_flat_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  surf_flat_cloud_msg.header.frame_id = "/aft_mapped";
-  g_surf_cloud_publisher.publish(surf_flat_cloud_msg);
+  sensor_msgs::PointCloud2 cloud_surf_flat_msg;
+  pcl::toROSMsg(cloud_surf_flat, cloud_surf_flat_msg);
+  cloud_surf_flat_msg.header.stamp = laser_cloud_msg->header.stamp;
+  cloud_surf_flat_msg.header.frame_id = "/aft_mapped";
+  g_surf_cloud_publisher.publish(cloud_surf_flat_msg);
 
-  sensor_msgs::PointCloud2 surf_less_flat_cloud_msg;
-  pcl::toROSMsg(surf_less_flat_cloud, surf_less_flat_cloud_msg);
-  surf_less_flat_cloud_msg.header.stamp = laser_cloud_msg->header.stamp;
-  surf_less_flat_cloud_msg.header.frame_id = "/aft_mapped";
-  g_surf_less_cloud_publisher.publish(surf_less_flat_cloud_msg);
+  sensor_msgs::PointCloud2 cloud_surf_less_flat_msg;
+  pcl::toROSMsg(cloud_surf_less_flat, cloud_surf_less_flat_msg);
+  cloud_surf_less_flat_msg.header.stamp = laser_cloud_msg->header.stamp;
+  cloud_surf_less_flat_msg.header.frame_id = "/aft_mapped";
+  g_surf_less_cloud_publisher.publish(cloud_surf_less_flat_msg);
 
   LOG_STEP_TIME("Scan registration", t_whole.toc());
   LOG_IF(WARNING, t_whole.toc() > 100)
@@ -415,7 +417,7 @@ int main(int argc, char **argv) {
 
   // 注册订阅器和发布器
   ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/velodyne_points", 10, HandleLaserCloud);
+      "/velodyne_points", 10, HandleLaserCloudMsg);
   g_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 100);
   g_corner_cloud_publisher =
