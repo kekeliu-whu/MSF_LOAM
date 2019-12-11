@@ -37,23 +37,16 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
-#include <pcl/kdtree/kdtree_flann.h>
-#include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <Eigen/Eigen>
 #include <queue>
 
-#include "common/common.h"
 #include "common/rigid_transform.h"
 #include "common/tic_toc.h"
-#include "slam/scan_matching/lidar_factor.h"
 #include "slam/scan_matching/odometry_scan_matcher.h"
 
 namespace {
-
-constexpr double kScanPeriod = 0.1;
 
 int g_skip_frame_num = 5;
 bool g_is_system_inited = false;
@@ -73,44 +66,6 @@ std::queue<sensor_msgs::PointCloud2ConstPtr> cornerLessSharpBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> surfFlatBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> surfLessFlatBuf;
 std::queue<sensor_msgs::PointCloud2ConstPtr> fullPointsBuf;
-
-// TODO
-// undistort lidar point
-void TransformToStart(const PointType &pi, PointType &po) {
-  // interpolation ratio
-  double s;
-  if (DISTORTION)
-    s = (pi.intensity - int(pi.intensity)) / kScanPeriod;
-  else
-    s = 1.0;
-  Eigen::Quaterniond q_point_last =
-      Eigen::Quaterniond::Identity().slerp(s, g_pose_curr2last.rotation());
-  Eigen::Vector3d t_point_last = s * g_pose_curr2last.translation();
-  Eigen::Vector3d point(pi.x, pi.y, pi.z);
-  Eigen::Vector3d un_point = q_point_last * point + t_point_last;
-
-  po.x = un_point.x();
-  po.y = un_point.y();
-  po.z = un_point.z();
-  po.intensity = pi.intensity;
-}
-
-// transform all lidar points to the start of the next frame
-void TransformToEnd(const PointType &pi, PointType &po) {
-  // undistort point first
-  PointType un_point_tmp;
-  TransformToStart(pi, un_point_tmp);
-
-  Eigen::Vector3d un_point(un_point_tmp.x, un_point_tmp.y, un_point_tmp.z);
-  Eigen::Vector3d point_end = g_pose_curr2last.inverse() * un_point;
-
-  po.x = point_end.x();
-  po.y = point_end.y();
-  po.z = point_end.z();
-
-  // Remove distortion time info
-  po.intensity = int(pi.intensity);
-}
 
 void HandleCloudSharpMsg(
     const sensor_msgs::PointCloud2ConstPtr &cornerPointsSharp) {
@@ -173,7 +128,7 @@ int main(int argc, char **argv) {
 
   nav_msgs::Path laserPath;
 
-  int frameCount = 0;
+  int curr_frame_idx = 0;
   ros::Rate rate(100);
 
   while (ros::ok()) {
@@ -266,33 +221,9 @@ int main(int argc, char **argv) {
     laserPath.header.frame_id = "/camera_init";
     laser_path_publisher.publish(laserPath);
 
-    // transform corner features and plane features to the scan end point
-    if (0) {
-      int cornerPointsLessSharpNum =
-          g_cloud_curr.cloud_corner_less_sharp->size();
-      for (int i = 0; i < cornerPointsLessSharpNum; i++) {
-        TransformToEnd(g_cloud_curr.cloud_corner_less_sharp->points[i],
-                       g_cloud_curr.cloud_corner_less_sharp->points[i]);
-      }
-
-      int surfPointsLessFlatNum = g_cloud_curr.cloud_surf_less_flat->size();
-      for (int i = 0; i < surfPointsLessFlatNum; i++) {
-        TransformToEnd(g_cloud_curr.cloud_surf_less_flat->points[i],
-                       g_cloud_curr.cloud_surf_less_flat->points[i]);
-      }
-
-      int laserCloudFullResNum = g_cloud_curr.cloud_full_res->size();
-      for (int i = 0; i < laserCloudFullResNum; i++) {
-        TransformToEnd(g_cloud_curr.cloud_full_res->points[i],
-                       g_cloud_curr.cloud_full_res->points[i]);
-      }
-    }
-
     std::swap(g_cloud_last, g_cloud_curr);
 
-    if (frameCount % g_skip_frame_num == 0) {
-      frameCount = 0;
-
+    if (curr_frame_idx % g_skip_frame_num == 0) {
       sensor_msgs::PointCloud2 laserCloudCornerLast2;
       pcl::toROSMsg(*g_cloud_last.cloud_corner_less_sharp,
                     laserCloudCornerLast2);
@@ -319,7 +250,7 @@ int main(int argc, char **argv) {
     LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
     if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
 
-    frameCount++;
+    curr_frame_idx++;
   }
   return 0;
 }
