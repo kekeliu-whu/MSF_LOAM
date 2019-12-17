@@ -124,7 +124,9 @@ struct LidarPlaneFactor {
 /**
  * @brief “点-面”距离最小化
  *
- * 已知平面法向量
+ * 已知平面到原点的法向量n、平面到原点的距离l、点p
+ * 
+ * 则 dist=n·p+l
  *
  */
 struct LidarPlaneNormFactor {
@@ -158,7 +160,15 @@ struct LidarPlaneNormFactor {
 
  private:
   Eigen::Vector3d curr_point_;
+  /**
+   * @brief 平面到原点的垂直单位向量
+   *
+   */
   Eigen::Vector3d plane_unit_norm_;
+  /**
+   * @brief 平面到原点的垂直距离
+   *
+   */
   double negative_OA_dot_norm_;
 };
 
