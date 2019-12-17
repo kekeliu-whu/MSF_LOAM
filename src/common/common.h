@@ -41,3 +41,5 @@
 #define DISTORTION 0
 
 using PointType = pcl::PointXYZI;
+using PointCloud = pcl::PointCloud<pcl::PointXYZI>;
+using PointCloudPtr = PointCloud::Ptr;

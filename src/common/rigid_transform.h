@@ -62,8 +62,8 @@ class Rigid3 {
   }
 
   const Vector& translation() const { return translation_; }
-  Vector& translation() { return translation_; }
   const Quaternion& rotation() const { return rotation_; }
+  Vector& translation() { return translation_; }
   Quaternion& rotation() { return rotation_; }
 
   Rigid3 inverse() const {
@@ -73,23 +73,12 @@ class Rigid3 {
   }
 
   std::string DebugString() const {
-    std::string out;
-    out.append("{ t: [");
-    out.append(std::to_string(translation().x()));
-    out.append(", ");
-    out.append(std::to_string(translation().y()));
-    out.append(", ");
-    out.append(std::to_string(translation().z()));
-    out.append("], q: [");
-    out.append(std::to_string(rotation().w()));
-    out.append(", ");
-    out.append(std::to_string(rotation().x()));
-    out.append(", ");
-    out.append(std::to_string(rotation().y()));
-    out.append(", ");
-    out.append(std::to_string(rotation().z()));
-    out.append("] }");
-    return out;
+    std::stringstream ss;
+    ss << "{ t: [" << translation().x() << ", " << translation().y() << ", "
+       << translation().z() << "], q: [" << rotation().w() << ", "
+       << rotation().x() << ", " << rotation().y() << ", " << rotation().z()
+       << "] }";
+    return ss.str();
   }
 
   bool IsValid() const {

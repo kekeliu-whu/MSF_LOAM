@@ -25,7 +25,6 @@ void TransformToStart(const PointType &pi, PointType &po,
     s = (pi.intensity - int(pi.intensity)) / kScanPeriod;
   else
     s = 1.0;
-  // s = 1;
   Eigen::Quaterniond q_point_last =
       Eigen::Quaterniond::Identity().slerp(s, transform_curr2last.rotation());
   Eigen::Vector3d t_point_last = s * transform_curr2last.translation();
@@ -46,29 +45,25 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
   Eigen::Quaterniond &r_curr2last = pose_estimate_curr2last->rotation();
   Eigen::Vector3d &t_curr2last = pose_estimate_curr2last->translation();
 
-  pcl::PointCloud<PointType>::Ptr cloud_corner_sharp =
-      cloud_curr.cloud_corner_sharp;
-  pcl::PointCloud<PointType>::Ptr cloud_corner_less_sharp =
-      cloud_curr.cloud_corner_less_sharp;
-  pcl::PointCloud<PointType>::Ptr cloud_surf_flat = cloud_curr.cloud_surf_flat;
-  pcl::PointCloud<PointType>::Ptr cloud_surf_less_flat =
-      cloud_curr.cloud_surf_less_flat;
-
-  pcl::PointCloud<PointType>::Ptr cloud_corner_last =
-      cloud_last.cloud_corner_less_sharp;
-  pcl::PointCloud<PointType>::Ptr cloud_surf_last =
-      cloud_last.cloud_surf_less_flat;
-
-  // less sharp 点构造的 kdtree
-  pcl::KdTreeFLANN<PointType>::Ptr kdtreeCornerLast(
-      new pcl::KdTreeFLANN<PointType>());
-  kdtreeCornerLast->setInputCloud(cloud_corner_last);
-  // less flat 点构造的 kdtree
-  pcl::KdTreeFLANN<PointType>::Ptr kdtreeSurfLast(
-      new pcl::KdTreeFLANN<PointType>());
-  kdtreeSurfLast->setInputCloud(cloud_surf_last);
+  PointCloudPtr cloud_corner_sharp = cloud_curr.cloud_corner_sharp;
+  PointCloudPtr cloud_corner_less_sharp = cloud_curr.cloud_corner_less_sharp;
+  PointCloudPtr cloud_surf_flat = cloud_curr.cloud_surf_flat;
+  PointCloudPtr cloud_surf_less_flat = cloud_curr.cloud_surf_less_flat;
+  PointCloudPtr cloud_corner_last = cloud_last.cloud_corner_less_sharp;
+  PointCloudPtr cloud_surf_last = cloud_last.cloud_surf_less_flat;
 
   TicToc t_opt;
+
+  TicToc t_kdtree;
+  // less sharp 点构造的 kdtree
+  pcl::KdTreeFLANN<PointType>::Ptr kdtree_corner_last(
+      new pcl::KdTreeFLANN<PointType>());
+  kdtree_corner_last->setInputCloud(cloud_corner_last);
+  // less flat 点构造的 kdtree
+  pcl::KdTreeFLANN<PointType>::Ptr kdtree_surf_last(
+      new pcl::KdTreeFLANN<PointType>());
+  kdtree_surf_last->setInputCloud(cloud_surf_last);
+  LOG_STEP_TIME("ODO", "Build kdtree", t_kdtree.toc());
 
   for (size_t opti_counter = 0; opti_counter < 2; ++opti_counter) {
     int corner_correspondence = 0, plane_correspondence = 0;
@@ -93,8 +88,8 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
     for (size_t i = 0; i < cloud_corner_sharp->size(); ++i) {
       TransformToStart(cloud_corner_sharp->points[i], pointSel,
                        *pose_estimate_curr2last);
-      kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd,
-                                       pointSearchSqDis);
+      kdtree_corner_last->nearestKSearch(pointSel, 1, pointSearchInd,
+                                         pointSearchSqDis);
 
       int closestPointInd = -1, minPointInd2 = -1;
       if (pointSearchSqDis[0] < kDistanceSqThreshold) {
@@ -176,11 +171,9 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
               kScanPeriod;
         else
           s = 1.0;
-        ceres::CostFunction *cost_function =
-            LidarEdgeFactor::Create(curr_point, last_point_a, last_point_b, s);
-        problem.AddResidualBlock(cost_function, loss_function,
-                                 r_curr2last.coeffs().data(),
-                                 t_curr2last.data());
+        problem.AddResidualBlock(
+            LidarEdgeFactor::Create(curr_point, last_point_a, last_point_b, s),
+            loss_function, r_curr2last.coeffs().data(), t_curr2last.data());
         corner_correspondence++;
       }
     }
@@ -189,8 +182,8 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
     for (size_t i = 0; i < cloud_surf_flat->size(); ++i) {
       TransformToStart(cloud_surf_flat->points[i], pointSel,
                        *pose_estimate_curr2last);
-      kdtreeSurfLast->nearestKSearch(pointSel, 1, pointSearchInd,
-                                     pointSearchSqDis);
+      kdtree_surf_last->nearestKSearch(pointSel, 1, pointSearchInd,
+                                       pointSearchSqDis);
 
       int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;
       if (pointSearchSqDis[0] < kDistanceSqThreshold) {
@@ -281,23 +274,22 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
                 kScanPeriod;
           else
             s = 1.0;
-          ceres::CostFunction *cost_function = LidarPlaneFactor::Create(
-              curr_point, last_point_a, last_point_b, last_point_c, s);
-          problem.AddResidualBlock(cost_function, loss_function,
-                                   r_curr2last.coeffs().data(),
-                                   t_curr2last.data());
+          problem.AddResidualBlock(
+              LidarPlaneFactor::Create(curr_point, last_point_a, last_point_b,
+                                       last_point_c, s),
+              loss_function, r_curr2last.coeffs().data(), t_curr2last.data());
           plane_correspondence++;
         }
       }
     }
 
-    LOG_STEP_TIME("data association", t_data.toc());
+    LOG_STEP_TIME("ODO", "Data association", t_data.toc());
 
     if ((corner_correspondence + plane_correspondence) < 10) {
-      LOG(WARNING) << "coner_correspondance=" << corner_correspondence
+      LOG(WARNING) << "[MAP] less correspondence: corner_correspondence="
+                   << corner_correspondence
                    << ", plane_correspondence=" << plane_correspondence;
-      LOG(WARNING) << "less correspondence! "
-                      "*************************************************\n";
+      return false;
     }
 
     TicToc t_solver;
@@ -307,9 +299,9 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
     options.minimizer_progress_to_stdout = false;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
-    LOG_STEP_TIME("solver time", t_solver.toc());
+    LOG_STEP_TIME("ODO", "Solver time", t_solver.toc());
   }
-  LOG_STEP_TIME("optimization twice", t_opt.toc());
+  LOG_STEP_TIME("ODO", "Optimization twice", t_opt.toc());
 
   return true;
 }
