@@ -9,8 +9,8 @@
 
 class OdometryScanMatcher {
  public:
-  static bool Match(const TimestampedPointCloud &cloud_last,
-                    const TimestampedPointCloud &cloud_curr,
+  static bool Match(const TimestampedPointCloud &scan_last,
+                    const TimestampedPointCloud &scan_curr,
                     Rigid3d *pose_estimate_curr2last);
 };
 

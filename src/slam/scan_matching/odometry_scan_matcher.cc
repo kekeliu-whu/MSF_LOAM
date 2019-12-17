@@ -39,18 +39,19 @@ void TransformToStart(const PointType &pi, PointType &po,
 
 }  // namespace
 
-bool OdometryScanMatcher::Match(const TimestampedPointCloud &cloud_last,
-                                const TimestampedPointCloud &cloud_curr,
+bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
+                                const TimestampedPointCloud &scan_curr,
                                 Rigid3d *pose_estimate_curr2last) {
   Eigen::Quaterniond &r_curr2last = pose_estimate_curr2last->rotation();
   Eigen::Vector3d &t_curr2last = pose_estimate_curr2last->translation();
 
-  PointCloudPtr cloud_corner_sharp = cloud_curr.cloud_corner_sharp;
-  PointCloudPtr cloud_corner_less_sharp = cloud_curr.cloud_corner_less_sharp;
-  PointCloudPtr cloud_surf_flat = cloud_curr.cloud_surf_flat;
-  PointCloudPtr cloud_surf_less_flat = cloud_curr.cloud_surf_less_flat;
-  PointCloudPtr cloud_corner_last = cloud_last.cloud_corner_less_sharp;
-  PointCloudPtr cloud_surf_last = cloud_last.cloud_surf_less_flat;
+  PointCloudConstPtr cloud_corner_sharp = scan_curr.cloud_corner_sharp;
+  PointCloudConstPtr cloud_corner_less_sharp =
+      scan_curr.cloud_corner_less_sharp;
+  PointCloudConstPtr cloud_surf_flat = scan_curr.cloud_surf_flat;
+  PointCloudConstPtr cloud_surf_less_flat = scan_curr.cloud_surf_less_flat;
+  PointCloudConstPtr cloud_corner_last = scan_last.cloud_corner_less_sharp;
+  PointCloudConstPtr cloud_surf_last = scan_last.cloud_surf_less_flat;
 
   TicToc t_opt;
 
