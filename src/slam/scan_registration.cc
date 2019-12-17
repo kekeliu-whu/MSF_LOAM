@@ -49,10 +49,6 @@
 #include "common/common.h"
 #include "common/tic_toc.h"
 
-using std::atan2;
-using std::cos;
-using std::sin;
-
 namespace {
 
 enum PointLabel { P_UNKNOWN = 0, P_LESS_SHARP = 1, P_SHARP = 2, P_FLAT = -1 };

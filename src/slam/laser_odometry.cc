@@ -54,7 +54,7 @@ bool g_is_system_inited = false;
 TimestampedPointCloud g_cloud_last;
 TimestampedPointCloud g_cloud_curr;
 
-// Transformation from scan to world
+// Transformation from scan to map
 Rigid3d g_pose_scan2world;
 
 // Transformation from current scan to previous scan
@@ -192,8 +192,8 @@ int main(int argc, char **argv) {
     } else {
       OdometryScanMatcher::Match(g_cloud_last, g_cloud_curr, &g_pose_curr2last);
 
-      LOG(INFO) << "[ODOM] odometry_delta: " << g_pose_curr2last;
-      LOG(INFO) << "[ODOM] odometry_curr: " << g_pose_scan2world;
+      LOG(INFO) << "[ODO] odometry_delta: " << g_pose_curr2last;
+      LOG(INFO) << "[ODO] odometry_curr: " << g_pose_scan2world;
       g_pose_scan2world = g_pose_scan2world * g_pose_curr2last;
     }
 
