@@ -61,13 +61,11 @@ bool g_is_system_inited = false;
 TimestampedPointCloud g_cloud_last;
 TimestampedPointCloud g_cloud_curr;
 
-// Rotation from scan to world
-Eigen::Quaterniond g_r_scan2world(1, 0, 0, 0);
-// Translation from scan to world
-Eigen::Vector3d g_t_scan2world(0, 0, 0);
+// Transformation from scan to world
+Rigid3d g_pose_scan2world;
 
-// Translation from current scan to previous scan
-Rigid3d g_transform_curr2last;
+// Transformation from current scan to previous scan
+Rigid3d g_pose_curr2last;
 
 // 消息队列
 std::queue<sensor_msgs::PointCloud2ConstPtr> cornerSharpBuf;
@@ -85,10 +83,9 @@ void TransformToStart(const PointType &pi, PointType &po) {
     s = (pi.intensity - int(pi.intensity)) / kScanPeriod;
   else
     s = 1.0;
-  // s = 1;
   Eigen::Quaterniond q_point_last =
-      Eigen::Quaterniond::Identity().slerp(s, g_transform_curr2last.rotation());
-  Eigen::Vector3d t_point_last = s * g_transform_curr2last.translation();
+      Eigen::Quaterniond::Identity().slerp(s, g_pose_curr2last.rotation());
+  Eigen::Vector3d t_point_last = s * g_pose_curr2last.translation();
   Eigen::Vector3d point(pi.x, pi.y, pi.z);
   Eigen::Vector3d un_point = q_point_last * point + t_point_last;
 
@@ -105,14 +102,14 @@ void TransformToEnd(const PointType &pi, PointType &po) {
   TransformToStart(pi, un_point_tmp);
 
   Eigen::Vector3d un_point(un_point_tmp.x, un_point_tmp.y, un_point_tmp.z);
-  Eigen::Vector3d point_end = g_transform_curr2last.inverse() * un_point;
+  Eigen::Vector3d point_end = g_pose_curr2last.inverse() * un_point;
 
   po.x = point_end.x();
   po.y = point_end.y();
   po.z = point_end.z();
 
   // Remove distortion time info
-  po.intensity = static_cast<int>(pi.intensity);
+  po.intensity = int(pi.intensity);
 }
 
 void HandleCloudSharpMsg(
@@ -206,7 +203,13 @@ int main(int argc, char **argv) {
         timeCornerPointsLessSharp != timeLaserCloudFullRes ||
         timeSurfPointsFlat != timeLaserCloudFullRes ||
         timeSurfPointsLessFlat != timeLaserCloudFullRes) {
-      LOG(FATAL) << "Unsync message!";
+      LOG(WARNING) << "[ODO] unsync message: "
+                   << "sharp=" << timeCornerPointsSharp
+                   << ", less sharp=" << timeCornerPointsLessSharp
+                   << ", flat=" << timeSurfPointsFlat
+                   << ", less flat=" << timeSurfPointsLessFlat
+                   << ", full=" << timeLaserCloudFullRes;
+      continue;
     }
 
     pcl::fromROSMsg(*cornerSharpBuf.front(), *g_cloud_curr.cloud_corner_sharp);
@@ -223,24 +226,20 @@ int main(int argc, char **argv) {
                     *g_cloud_curr.cloud_surf_less_flat);
     surfLessFlatBuf.pop();
 
-    pcl::fromROSMsg(*fullPointsBuf.front(), *g_cloud_curr.cloud_full);
+    pcl::fromROSMsg(*fullPointsBuf.front(), *g_cloud_curr.cloud_full_res);
     fullPointsBuf.pop();
 
     TicToc t_whole;
     // initializing
     if (!g_is_system_inited) {
       g_is_system_inited = true;
-      LOG(INFO) << "Initializing ...";
+      LOG(INFO) << "[ODO] Initializing ...";
     } else {
-      OdometryScanMatcher::Match(g_cloud_last, g_cloud_curr,
-                                 &g_transform_curr2last);
+      OdometryScanMatcher::Match(g_cloud_last, g_cloud_curr, &g_pose_curr2last);
 
-      LOG(WARNING) << "odometry_delta: "
-                   << g_transform_curr2last.translation().transpose();
-      LOG(WARNING) << "odometry_curr: " << g_t_scan2world.transpose();
-      g_t_scan2world =
-          g_t_scan2world + g_r_scan2world * g_transform_curr2last.translation();
-      g_r_scan2world = g_r_scan2world * g_transform_curr2last.rotation();
+      LOG(INFO) << "[ODOM] odometry_delta: " << g_pose_curr2last;
+      LOG(INFO) << "[ODOM] odometry_curr: " << g_pose_scan2world;
+      g_pose_scan2world = g_pose_scan2world * g_pose_curr2last;
     }
 
     TicToc t_pub;
@@ -250,13 +249,13 @@ int main(int argc, char **argv) {
     laserOdometry.header.frame_id = "/camera_init";
     laserOdometry.child_frame_id = "/laser_odom";
     laserOdometry.header.stamp = ros::Time().fromSec(timeSurfPointsLessFlat);
-    laserOdometry.pose.pose.orientation.x = g_r_scan2world.x();
-    laserOdometry.pose.pose.orientation.y = g_r_scan2world.y();
-    laserOdometry.pose.pose.orientation.z = g_r_scan2world.z();
-    laserOdometry.pose.pose.orientation.w = g_r_scan2world.w();
-    laserOdometry.pose.pose.position.x = g_t_scan2world.x();
-    laserOdometry.pose.pose.position.y = g_t_scan2world.y();
-    laserOdometry.pose.pose.position.z = g_t_scan2world.z();
+    laserOdometry.pose.pose.orientation.x = g_pose_scan2world.rotation().x();
+    laserOdometry.pose.pose.orientation.y = g_pose_scan2world.rotation().y();
+    laserOdometry.pose.pose.orientation.z = g_pose_scan2world.rotation().z();
+    laserOdometry.pose.pose.orientation.w = g_pose_scan2world.rotation().w();
+    laserOdometry.pose.pose.position.x = g_pose_scan2world.translation().x();
+    laserOdometry.pose.pose.position.y = g_pose_scan2world.translation().y();
+    laserOdometry.pose.pose.position.z = g_pose_scan2world.translation().z();
     laser_odom_publisher.publish(laserOdometry);
 
     geometry_msgs::PoseStamped laserPose;
@@ -282,10 +281,10 @@ int main(int argc, char **argv) {
                        g_cloud_curr.cloud_surf_less_flat->points[i]);
       }
 
-      int laserCloudFullResNum = g_cloud_curr.cloud_full->size();
+      int laserCloudFullResNum = g_cloud_curr.cloud_full_res->size();
       for (int i = 0; i < laserCloudFullResNum; i++) {
-        TransformToEnd(g_cloud_curr.cloud_full->points[i],
-                       g_cloud_curr.cloud_full->points[i]);
+        TransformToEnd(g_cloud_curr.cloud_full_res->points[i],
+                       g_cloud_curr.cloud_full_res->points[i]);
       }
     }
 
@@ -310,14 +309,14 @@ int main(int argc, char **argv) {
       cloud_surf_last_publisher.publish(laserCloudSurfLast2);
 
       sensor_msgs::PointCloud2 laserCloudFullRes3;
-      pcl::toROSMsg(*g_cloud_curr.cloud_full, laserCloudFullRes3);
+      pcl::toROSMsg(*g_cloud_curr.cloud_full_res, laserCloudFullRes3);
       laserCloudFullRes3.header.stamp =
           ros::Time().fromSec(timeSurfPointsLessFlat);
       laserCloudFullRes3.header.frame_id = "/camera";
       cloud_full_publisher.publish(laserCloudFullRes3);
     }
-    LOG_STEP_TIME("publication", t_pub.toc());
-    LOG_STEP_TIME("whole laserOdometry", t_whole.toc());
+    LOG_STEP_TIME("ODO", "publication", t_pub.toc());
+    LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
     if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
 
     frameCount++;

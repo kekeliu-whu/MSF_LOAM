@@ -15,18 +15,18 @@
 
 struct TimestampedPointCloud {
   ros::Time timestamp;
-  pcl::PointCloud<PointType>::Ptr cloud_full;
-  pcl::PointCloud<PointType>::Ptr cloud_corner_sharp;
-  pcl::PointCloud<PointType>::Ptr cloud_corner_less_sharp;
-  pcl::PointCloud<PointType>::Ptr cloud_surf_flat;
-  pcl::PointCloud<PointType>::Ptr cloud_surf_less_flat;
+  PointCloudPtr cloud_full_res;
+  PointCloudPtr cloud_corner_sharp;
+  PointCloudPtr cloud_corner_less_sharp;
+  PointCloudPtr cloud_surf_flat;
+  PointCloudPtr cloud_surf_less_flat;
 
   TimestampedPointCloud()
-      : cloud_full(new pcl::PointCloud<PointType>),
-        cloud_corner_sharp(new pcl::PointCloud<PointType>),
-        cloud_corner_less_sharp(new pcl::PointCloud<PointType>),
-        cloud_surf_flat(new pcl::PointCloud<PointType>),
-        cloud_surf_less_flat(new pcl::PointCloud<PointType>) {}
+      : cloud_full_res(new PointCloud),
+        cloud_corner_sharp(new PointCloud),
+        cloud_corner_less_sharp(new PointCloud),
+        cloud_surf_flat(new PointCloud),
+        cloud_surf_less_flat(new PointCloud) {}
 };
 
 #endif  // ALOAM_VELODYNE_TIME_STAMPED_POINT_CLOUD_H

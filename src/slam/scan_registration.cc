@@ -123,31 +123,30 @@ void HandleLaserCloudMsg(
   RemoveClosePointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
   int cloudSize = laser_cloud_in.points.size();
-  float startOri =
+  double startOri =
       -atan2(laser_cloud_in.points[0].y, laser_cloud_in.points[0].x);
-  float endOri = -atan2(laser_cloud_in.points[cloudSize - 1].y,
-                        laser_cloud_in.points[cloudSize - 1].x) +
-                 2 * M_PI;
+  double endOri = -atan2(laser_cloud_in.points[cloudSize - 1].y,
+                         laser_cloud_in.points[cloudSize - 1].x) +
+                  2 * M_PI;
 
   if (endOri - startOri > 3 * M_PI) {
     endOri -= 2 * M_PI;
   } else if (endOri - startOri < M_PI) {
     endOri += 2 * M_PI;
   }
-  // printf("end Ori %f\n", endOri);
 
   bool halfPassed = false;
   int count = cloudSize;
   PointType point;
-  std::vector<pcl::PointCloud<PointType>> laserCloudScans(g_scan_num);
+  std::vector<PointCloud> laserCloudScans(g_scan_num);
   for (int i = 0; i < cloudSize; i++) {
     point.x = laser_cloud_in.points[i].x;
     point.y = laser_cloud_in.points[i].y;
     point.z = laser_cloud_in.points[i].z;
 
     // 计算scan_id
-    float angle = atan(point.z / sqrt(point.x * point.x + point.y * point.y)) *
-                  180 / M_PI;
+    double angle = atan(point.z / sqrt(point.x * point.x + point.y * point.y)) *
+                   180 / M_PI;
     int scanID = 0;
 
     if (g_scan_num == 16) {
@@ -178,7 +177,7 @@ void HandleLaserCloudMsg(
     }
 
     // TODO
-    float ori = -atan2(point.y, point.x);
+    double ori = -atan2(point.y, point.x);
     if (!halfPassed) {
       if (ori < startOri - M_PI / 2) {
         ori += 2 * M_PI;
@@ -199,7 +198,7 @@ void HandleLaserCloudMsg(
     }
 
     // 密度的整数部分为scan_id，浮点部分为点在当前帧的时间偏移
-    float relTime = (ori - startOri) / (endOri - startOri);
+    double relTime = (ori - startOri) / (endOri - startOri);
     point.intensity = scanID + kScanPeriod * relTime;
     laserCloudScans[scanID].push_back(point);
   }
@@ -207,16 +206,16 @@ void HandleLaserCloudMsg(
       << "More than 10 invalid points: no matching scan id!!";
 
   cloudSize = count;
-  LOG(INFO) << "Cloud size: " << cloudSize;
+  LOG(INFO) << "[REG] Cloud size: " << cloudSize;
 
-  pcl::PointCloud<PointType>::Ptr laser_cloud(new pcl::PointCloud<PointType>());
+  PointCloudPtr laser_cloud(new PointCloud);
   for (int i = 0; i < g_scan_num; i++) {
     scan_start_indices[i] = laser_cloud->size() + 5;
     *laser_cloud += laserCloudScans[i];
     scan_end_indices[i] = laser_cloud->size() - 6;
   }
 
-  LOG_STEP_TIME("Re-index scans", t_prepare.toc());
+  LOG_STEP_TIME("REG", "Re-index scans", t_prepare.toc());
 
   /**
    * @brief 计算所有点的曲率
@@ -226,24 +225,27 @@ void HandleLaserCloudMsg(
    * curv(i) = dx(i)^2 + dy(i)^2 + dz(i)^2
    */
   for (int i = 5; i < cloudSize - 5; i++) {
-    float diffX = laser_cloud->points[i - 5].x + laser_cloud->points[i - 4].x +
-                  laser_cloud->points[i - 3].x + laser_cloud->points[i - 2].x +
-                  laser_cloud->points[i - 1].x - 10 * laser_cloud->points[i].x +
-                  laser_cloud->points[i + 1].x + laser_cloud->points[i + 2].x +
-                  laser_cloud->points[i + 3].x + laser_cloud->points[i + 4].x +
-                  laser_cloud->points[i + 5].x;
-    float diffY = laser_cloud->points[i - 5].y + laser_cloud->points[i - 4].y +
-                  laser_cloud->points[i - 3].y + laser_cloud->points[i - 2].y +
-                  laser_cloud->points[i - 1].y - 10 * laser_cloud->points[i].y +
-                  laser_cloud->points[i + 1].y + laser_cloud->points[i + 2].y +
-                  laser_cloud->points[i + 3].y + laser_cloud->points[i + 4].y +
-                  laser_cloud->points[i + 5].y;
-    float diffZ = laser_cloud->points[i - 5].z + laser_cloud->points[i - 4].z +
-                  laser_cloud->points[i - 3].z + laser_cloud->points[i - 2].z +
-                  laser_cloud->points[i - 1].z - 10 * laser_cloud->points[i].z +
-                  laser_cloud->points[i + 1].z + laser_cloud->points[i + 2].z +
-                  laser_cloud->points[i + 3].z + laser_cloud->points[i + 4].z +
-                  laser_cloud->points[i + 5].z;
+    double diffX = laser_cloud->points[i - 5].x + laser_cloud->points[i - 4].x +
+                   laser_cloud->points[i - 3].x + laser_cloud->points[i - 2].x +
+                   laser_cloud->points[i - 1].x -
+                   10 * laser_cloud->points[i].x +
+                   laser_cloud->points[i + 1].x + laser_cloud->points[i + 2].x +
+                   laser_cloud->points[i + 3].x + laser_cloud->points[i + 4].x +
+                   laser_cloud->points[i + 5].x;
+    double diffY = laser_cloud->points[i - 5].y + laser_cloud->points[i - 4].y +
+                   laser_cloud->points[i - 3].y + laser_cloud->points[i - 2].y +
+                   laser_cloud->points[i - 1].y -
+                   10 * laser_cloud->points[i].y +
+                   laser_cloud->points[i + 1].y + laser_cloud->points[i + 2].y +
+                   laser_cloud->points[i + 3].y + laser_cloud->points[i + 4].y +
+                   laser_cloud->points[i + 5].y;
+    double diffZ = laser_cloud->points[i - 5].z + laser_cloud->points[i - 4].z +
+                   laser_cloud->points[i - 3].z + laser_cloud->points[i - 2].z +
+                   laser_cloud->points[i - 1].z -
+                   10 * laser_cloud->points[i].z +
+                   laser_cloud->points[i + 1].z + laser_cloud->points[i + 2].z +
+                   laser_cloud->points[i + 3].z + laser_cloud->points[i + 4].z +
+                   laser_cloud->points[i + 5].z;
 
     g_cloud_curvatures[i] = diffX * diffX + diffY * diffY + diffZ * diffZ;
     g_cloud_sorted_indices[i] = i;
@@ -253,17 +255,16 @@ void HandleLaserCloudMsg(
 
   TicToc t_pts;
 
-  pcl::PointCloud<PointType> cloud_corner_sharp;       // sharp 点
-  pcl::PointCloud<PointType> cloud_corner_less_sharp;  // less sharp 点
-  pcl::PointCloud<PointType> cloud_surf_flat;          // flat 点
-  pcl::PointCloud<PointType> cloud_surf_less_flat;     // less flat 点
+  PointCloud cloud_corner_sharp;       // sharp 点
+  PointCloud cloud_corner_less_sharp;  // less sharp 点
+  PointCloud cloud_surf_flat;          // flat 点
+  PointCloud cloud_surf_less_flat;     // less flat 点
 
-  float t_q_sort = 0;
+  double t_q_sort = 0;
   // 提取每帧扫描线中的特征点
   for (int i = 0; i < g_scan_num; i++) {
     if (scan_end_indices[i] - scan_start_indices[i] < 6) continue;
-    pcl::PointCloud<PointType>::Ptr surfPointsLessFlatScan(
-        new pcl::PointCloud<PointType>);
+    PointCloudPtr surfPointsLessFlatScan(new PointCloud);
     // 将每条扫描线分成6片，对每片提取特征点
     for (int j = 0; j < 6; j++) {
       int sp = scan_start_indices[i] +
@@ -354,7 +355,7 @@ void HandleLaserCloudMsg(
       }
     }
 
-    pcl::PointCloud<PointType> surfPointsLessFlatScanDS;
+    PointCloud surfPointsLessFlatScanDS;
     pcl::VoxelGrid<PointType> downSizeFilter;
     downSizeFilter.setInputCloud(surfPointsLessFlatScan);
     downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
@@ -362,8 +363,8 @@ void HandleLaserCloudMsg(
 
     cloud_surf_less_flat += surfPointsLessFlatScanDS;
   }
-  LOG_STEP_TIME("Curvature sort", t_q_sort);
-  LOG_STEP_TIME("Seperate points", t_pts.toc());
+  LOG_STEP_TIME("REG", "Curvature sort", t_q_sort);
+  LOG_STEP_TIME("REG", "Seperate points", t_pts.toc());
 
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*laser_cloud, laser_cloud_out_msg);
@@ -395,7 +396,7 @@ void HandleLaserCloudMsg(
   cloud_surf_less_flat_msg.header.frame_id = "/aft_mapped";
   g_surf_less_cloud_publisher.publish(cloud_surf_less_flat_msg);
 
-  LOG_STEP_TIME("Scan registration", t_whole.toc());
+  LOG_STEP_TIME("REG", "Scan registration", t_whole.toc());
   LOG_IF(WARNING, t_whole.toc() > 100)
       << "Scan registration process over 100ms";
 }
