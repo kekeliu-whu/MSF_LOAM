@@ -237,24 +237,18 @@ void process() {
       laserCloudSurfFromMap = hybrid_grid_map_surf.GetSurroundedCloud(
           pose_map_scan2world.translation().cast<float>());
 
-      int laserCloudCornerFromMapNum = laserCloudCornerFromMap->points.size();
-      int laserCloudSurfFromMapNum = laserCloudSurfFromMap->points.size();
-
-      PointCloudPtr laserCloudCornerStack(new PointCloud);
       downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
-      downSizeFilterCorner.filter(*laserCloudCornerStack);
-      int laserCloudCornerStackNum = laserCloudCornerStack->points.size();
+      downSizeFilterCorner.filter(*laserCloudCornerLast);
 
-      PointCloudPtr laserCloudSurfStack(new PointCloud);
       downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
-      downSizeFilterSurf.filter(*laserCloudSurfStack);
-      int laserCloudSurfStackNum = laserCloudSurfStack->points.size();
+      downSizeFilterSurf.filter(*laserCloudSurfLast);
 
       LOG_STEP_TIME("MAP", "prepare", t_shift.toc());
       LOG(INFO) << "[MAP]"
-                << " corner=" << laserCloudCornerFromMapNum
-                << ", surf=" << laserCloudSurfFromMapNum;
-      if (laserCloudCornerFromMapNum > 10 && laserCloudSurfFromMapNum > 50) {
+                << " corner=" << laserCloudCornerFromMap->size()
+                << ", surf=" << laserCloudSurfFromMap->size();
+      if (laserCloudCornerFromMap->size() > 10 &&
+          laserCloudSurfFromMap->size() > 50) {
         TicToc t_opt;
         TicToc t_tree;
         kdtreeCornerFromMap->setInputCloud(laserCloudCornerFromMap);
@@ -278,8 +272,8 @@ void process() {
           TicToc t_data;
           int corner_num = 0;
 
-          for (int i = 0; i < laserCloudCornerStackNum; i++) {
-            pointOri = laserCloudCornerStack->points[i];
+          for (int i = 0; i < laserCloudCornerLast->size(); i++) {
+            pointOri = laserCloudCornerLast->points[i];
             //            double sqrtDis = pointOri.x * pointOri.x + pointOri.y
             //            * pointOri.y +
             //                             pointOri.z * pointOri.z;
@@ -343,8 +337,8 @@ void process() {
           }
 
           int surf_num = 0;
-          for (int i = 0; i < laserCloudSurfStackNum; i++) {
-            pointOri = laserCloudSurfStack->points[i];
+          for (int i = 0; i < laserCloudSurfLast->size(); i++) {
+            pointOri = laserCloudSurfLast->points[i];
             // double sqrtDis = pointOri.x * pointOri.x + pointOri.y *
             // pointOri.y + pointOri.z * pointOri.z;
             pointAssociateToMap(pointOri, pointSel);
@@ -437,18 +431,18 @@ void process() {
 
       TicToc t_add;
 
-      for (int i = 0; i < laserCloudCornerStackNum; i++) {
-        pointAssociateToMap(laserCloudCornerStack->points[i],
-                            laserCloudCornerStack->points[i]);
+      for (int i = 0; i < laserCloudCornerLast->size(); i++) {
+        pointAssociateToMap(laserCloudCornerLast->points[i],
+                            laserCloudCornerLast->points[i]);
       }
-      hybrid_grid_map_corner.InsertScan(laserCloudCornerStack,
+      hybrid_grid_map_corner.InsertScan(laserCloudCornerLast,
                                         downSizeFilterCorner);
 
-      for (int i = 0; i < laserCloudSurfStackNum; i++) {
-        pointAssociateToMap(laserCloudSurfStack->points[i],
-                            laserCloudSurfStack->points[i]);
+      for (int i = 0; i < laserCloudSurfLast->size(); i++) {
+        pointAssociateToMap(laserCloudSurfLast->points[i],
+                            laserCloudSurfLast->points[i]);
       }
-      hybrid_grid_map_surf.InsertScan(laserCloudSurfStack, downSizeFilterSurf);
+      hybrid_grid_map_surf.InsertScan(laserCloudSurfLast, downSizeFilterSurf);
 
       LOG_STEP_TIME("MAP", "add points", t_add.toc());
 
@@ -466,7 +460,7 @@ void process() {
         pubLaserCloudSurround.publish(laserCloudSurround3);
       }
 
-      int laserCloudFullResNum = laserCloudFullRes->points.size();
+      int laserCloudFullResNum = laserCloudFullRes->size();
       for (int i = 0; i < laserCloudFullResNum; i++) {
         pointAssociateToMap(laserCloudFullRes->points[i],
                             laserCloudFullRes->points[i]);
