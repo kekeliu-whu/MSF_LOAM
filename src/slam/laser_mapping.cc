@@ -52,10 +52,10 @@
 #include <vector>
 
 #include "common/common.h"
-#include "common/hybrid_grid.h"
 #include "common/rigid_transform.h"
 #include "common/tic_toc.h"
 #include "common/type_conversion.h"
+#include "slam/hybrid_grid.h"
 #include "slam/scan_matching/lidar_factor.h"
 
 namespace {
@@ -101,11 +101,6 @@ std::queue<nav_msgs::Odometry::ConstPtr> odometryBuf;
 
 pcl::VoxelGrid<PointType> downSizeFilterCorner;
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
-
-std::vector<int> pointSearchInd;
-std::vector<float> pointSearchSqDis;
-
-PointType pointOri, pointSel;
 
 ros::Publisher pubLaserCloudSurround, pubLaserCloudMap, pubLaserCloudFullRes,
     pubOdomAftMapped, pubOdomAftMappedHighFrec, pubLaserAfterMappedPath;
@@ -272,11 +267,13 @@ void process() {
           TicToc t_data;
           int corner_num = 0;
 
-          for (int i = 0; i < laserCloudCornerLast->size(); i++) {
+          std::vector<int> pointSearchInd;
+          std::vector<float> pointSearchSqDis;
+
+          PointType pointOri, pointSel;
+
+          for (size_t i = 0; i < laserCloudCornerLast->size(); i++) {
             pointOri = laserCloudCornerLast->points[i];
-            //            double sqrtDis = pointOri.x * pointOri.x + pointOri.y
-            //            * pointOri.y +
-            //                             pointOri.z * pointOri.z;
             pointAssociateToMap(pointOri, pointSel);
             kdtreeCornerFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                                 pointSearchSqDis);
@@ -315,32 +312,11 @@ void process() {
                 corner_num++;
               }
             }
-            /*
-            else if (pointSearchSqDis[4] < 0.01 * sqrtDis) {
-              Eigen::Vector3d center(0, 0, 0);
-              for (int j = 0; j < 5; j++) {
-                Eigen::Vector3d tmp =
-                    laserCloudCornerFromMap->points[pointSearchInd[j]]
-                        .getVector3fMap()
-                        .cast<double>();
-                center += tmp;
-              }
-              center = center / 5.0;
-              Eigen::Vector3d curr_point(pointOri.x, pointOri.y, pointOri.z);
-              ceres::CostFunction *cost_function =
-                  LidarDistanceFactor::Create(curr_point, center);
-              problem.AddResidualBlock(cost_function, loss_function,
-                                       pose_map_scan2world.rotation().coeffs().data(),
-                                       pose_map_scan2world.translation().data());
-            }
-             */
           }
 
           int surf_num = 0;
-          for (int i = 0; i < laserCloudSurfLast->size(); i++) {
+          for (size_t i = 0; i < laserCloudSurfLast->size(); i++) {
             pointOri = laserCloudSurfLast->points[i];
-            // double sqrtDis = pointOri.x * pointOri.x + pointOri.y *
-            // pointOri.y + pointOri.z * pointOri.z;
             pointAssociateToMap(pointOri, pointSel);
             kdtreeSurfFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                               pointSearchSqDis);
@@ -364,14 +340,11 @@ void process() {
               bool planeValid = true;
               for (int j = 0; j < 5; j++) {
                 // if OX * n > 0.2, then plane is not fit well
-                if (fabs(
-                        norm(0) *
-                            laserCloudSurfFromMap->points[pointSearchInd[j]].x +
-                        norm(1) *
-                            laserCloudSurfFromMap->points[pointSearchInd[j]].y +
-                        norm(2) *
-                            laserCloudSurfFromMap->points[pointSearchInd[j]].z +
-                        negative_OA_dot_norm) > 0.2) {
+                if (fabs(norm.dot(
+                             laserCloudSurfFromMap->points[pointSearchInd[j]]
+                                 .getVector3fMap()
+                                 .cast<double>()) +
+                         negative_OA_dot_norm) > 0.2) {
                   planeValid = false;
                   break;
                 }
@@ -388,26 +361,6 @@ void process() {
                 surf_num++;
               }
             }
-            /*
-            else if(pointSearchSqDis[4] < 0.01 * sqrtDis)
-            {
-                    Eigen::Vector3d center(0, 0, 0);
-                    for (int j = 0; j < 5; j++)
-                    {
-                            Eigen::Vector3d
-            tmp(laserCloudSurfFromMap->points[pointSearchInd[j]].x,
-                                                                    laserCloudSurfFromMap->points[pointSearchInd[j]].y,
-                                                                    laserCloudSurfFromMap->points[pointSearchInd[j]].z);
-                            center = center + tmp;
-                    }
-                    center = center / 5.0;
-                    Eigen::Vector3d curr_point(pointOri.x, pointOri.y,
-            pointOri.z); ceres::CostFunction *cost_function =
-            LidarDistanceFactor::Create(curr_point, center);
-                    problem.AddResidualBlock(cost_function, loss_function,
-            parameters, parameters + 4);
-            }
-            */
           }
 
           LOG_STEP_TIME("MAP", "Data association", t_data.toc());
@@ -431,14 +384,14 @@ void process() {
 
       TicToc t_add;
 
-      for (int i = 0; i < laserCloudCornerLast->size(); i++) {
+      for (size_t i = 0; i < laserCloudCornerLast->size(); i++) {
         pointAssociateToMap(laserCloudCornerLast->points[i],
                             laserCloudCornerLast->points[i]);
       }
       hybrid_grid_map_corner.InsertScan(laserCloudCornerLast,
                                         downSizeFilterCorner);
 
-      for (int i = 0; i < laserCloudSurfLast->size(); i++) {
+      for (size_t i = 0; i < laserCloudSurfLast->size(); i++) {
         pointAssociateToMap(laserCloudSurfLast->points[i],
                             laserCloudSurfLast->points[i]);
       }
