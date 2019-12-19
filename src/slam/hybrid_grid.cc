@@ -16,6 +16,8 @@
 
 #include <Eigen/Core>
 #include <array>
+#include <boost/container/set.hpp>
+#include <boost/unordered_set.hpp>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -458,70 +460,69 @@ class HybridGridBase : public GridBase<ValueType> {
 // can only be tens of meters from the origin.
 // The hard limit of cell indexes is +/- 8192 around the origin.
 class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
+ private:
+  using Set = boost::unordered_set<PointCloudPtr>;
+
  public:
   explicit HybridGridImpl(const float resolution)
       : HybridGridBase<PointCloudPtr>(resolution) {}
 
-  PointCloudPtr GetSurroundedCloud(const Eigen::Vector3f pose) {
-    PointCloudPtr cloud_surround(new PointCloud);
-
-    auto pi_min = GetCellIndex(pose - kDist * Eigen::Vector3f::Ones());
-    auto pi_max = GetCellIndex(pose + kDist * Eigen::Vector3f::Ones());
-
-    // TODO
-    for (int i = pi_min.x(); i <= pi_max.x(); ++i) {
-      for (int j = pi_min.y(); j <= pi_max.y(); ++j) {
-        for (int k = pi_min.z(); k <= pi_max.z(); ++k) {
-          auto cloud_in_grid = this->value({i, j, k});
-          if (cloud_in_grid) {
-            *cloud_surround += *cloud_in_grid;
+  PointCloudPtr GetSurroundedCloud(const PointCloudPtr& scan,
+                                   const Rigid3d& pose) {
+    Set grid_set;
+    for (auto& point : *scan) {
+      if (point.getVector3fMap().norm() > kDist) continue;
+      auto new_point = pose.cast<float>() * point.getVector3fMap();
+      // TODO
+      // Need to get more points!
+      auto grid_id = this->GetCellIndex(new_point);
+      for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+          for (int k = -1; k <= 1; ++k) {
+            TryInsertGrid(grid_set, grid_id + Eigen::Array3i(i, j, k));
           }
         }
       }
     }
-
+    PointCloudPtr cloud_surround(new PointCloud);
+    cloud_surround->reserve(200 * 1000);
+    for (auto& cloud_in_grid : grid_set) {
+      *cloud_surround += *cloud_in_grid;
+    }
     return cloud_surround;
   }
 
   void InsertScan(const PointCloudPtr& scan, pcl::Filter<PointType>& filter) {
-    if (scan->size() == 0) return;
-
+    if (scan->empty()) return;
     // 添加scan到点云
     for (auto& point : *scan) {
-      PointCloudPtr& cloud_in_grid =
-          *this->mutable_value(GetCellIndex(point.getArray3fMap()));
-      if (!cloud_in_grid) cloud_in_grid.reset(new PointCloud);
-      cloud_in_grid->push_back(point);
+      PointCloudPtr* cloud_in_grid =
+          this->mutable_value(GetCellIndex(point.getArray3fMap()));
+      if (!cloud_in_grid->get()) cloud_in_grid->reset(new PointCloud);
+      (*cloud_in_grid)->push_back(point);
     }
-
     // 降采样
-    auto p_min = scan->at(0).getArray3fMap();
-    auto p_max = scan->at(1).getArray3fMap();
+    Set grid_set;
     for (auto& point : *scan) {
-      p_min = p_min.min(point.getArray3fMap());
-      p_max = p_max.max(point.getArray3fMap());
+      TryInsertGrid(grid_set, this->GetCellIndex(point.getArray3fMap()));
     }
-
-    auto pi_min = GetCellIndex(p_min);
-    auto pi_max = GetCellIndex(p_max);
-
-    // TODO
-    for (int i = pi_min.x(); i <= pi_max.x(); ++i) {
-      for (int j = pi_min.y(); j <= pi_max.y(); ++j) {
-        for (int k = pi_min.z(); k <= pi_max.z(); ++k) {
-          auto cloud_in_grid = this->value({i, j, k});
-          if (cloud_in_grid) {
-            filter.setInputCloud(cloud_in_grid);
-            // TODO
-            filter.filter(*cloud_in_grid);
-          }
-        }
-      }
+    for (auto& cloud_in_grid : grid_set) {
+      filter.setInputCloud(cloud_in_grid);
+      filter.filter(*cloud_in_grid);
     }
   }
 
  private:
-  const double kDist = 100.0;
+  void TryInsertGrid(Set& grid_set, const Eigen::Array3i& grid_id) {
+    auto cloud_in_grid = this->value(grid_id);
+    if (cloud_in_grid) {
+      grid_set.insert(cloud_in_grid);
+    }
+  }
+
+ private:
+  const double kDist = 60.0;
+  const double kDistFlann = 1.1;
 };
 
 HybridGrid::HybridGrid(const float& resolution)
@@ -529,8 +530,9 @@ HybridGrid::HybridGrid(const float& resolution)
 
 HybridGrid::~HybridGrid() { delete hybrid_grid_; }
 
-PointCloudPtr HybridGrid::GetSurroundedCloud(const Eigen::Vector3f& pose) {
-  return hybrid_grid_->GetSurroundedCloud(pose);
+PointCloudPtr HybridGrid::GetSurroundedCloud(const PointCloudPtr& scan,
+                                             const Rigid3d& pose) {
+  return hybrid_grid_->GetSurroundedCloud(scan, pose);
 }
 
 void HybridGrid::InsertScan(const PointCloudPtr& scan,
