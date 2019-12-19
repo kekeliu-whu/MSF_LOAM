@@ -14,26 +14,18 @@
  * limitations under the License.
  */
 
-#ifndef CARTOGRAPHER_MAPPING_3D_HYBRID_GRID_H_
-#define CARTOGRAPHER_MAPPING_3D_HYBRID_GRID_H_
+#ifndef ALOAM_VELODYNE_HYBRID_GRID_H
+#define ALOAM_VELODYNE_HYBRID_GRID_H
 
+#include <Eigen/Core>
 #include <array>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <utility>
 #include <vector>
 
-#include "Eigen/Core"
-#include "absl/memory/memory.h"
-#include "cartographer/common/math.h"
-#include "cartographer/common/port.h"
-#include "cartographer/mapping/probability_values.h"
-#include "cartographer/mapping/proto/3d/hybrid_grid.pb.h"
-#include "cartographer/transform/transform.h"
 #include "glog/logging.h"
-
-namespace cartographer {
-namespace mapping {
 
 // Converts an 'index' with each dimension from 0 to 2^'bits' - 1 to a flat
 // z-major index.
@@ -47,8 +39,7 @@ inline int ToFlatIndex(const Eigen::Array3i& index, const int bits) {
 inline Eigen::Array3i To3DIndex(const int index, const int bits) {
   DCHECK_LT(index, 1 << (3 * bits));
   const int mask = (1 << bits) - 1;
-  return Eigen::Array3i(index & mask, (index >> bits) & mask,
-                        (index >> bits) >> bits);
+  return {index & mask, (index >> bits) & mask, (index >> bits) >> bits};
 }
 
 // A function to compare value to the default value. (Allows specializations).
@@ -169,7 +160,7 @@ class NestedGrid {
     std::unique_ptr<WrappedGrid>& meta_cell =
         meta_cells_[ToFlatIndex(meta_index, kBits)];
     if (meta_cell == nullptr) {
-      meta_cell = absl::make_unique<WrappedGrid>();
+      meta_cell.reset(new WrappedGrid());
     }
     const Eigen::Array3i inner_index =
         index - meta_index * WrappedGrid::grid_size();
@@ -253,8 +244,8 @@ class DynamicGrid {
   using ValueType = typename WrappedGrid::ValueType;
 
   DynamicGrid() : bits_(1), meta_cells_(8) {}
-  DynamicGrid(DynamicGrid&&) = default;
-  DynamicGrid& operator=(DynamicGrid&&) = default;
+  DynamicGrid(DynamicGrid&&) noexcept = default;
+  DynamicGrid& operator=(DynamicGrid&&) noexcept = default;
 
   // Returns the current number of voxels per dimension.
   int grid_size() const { return WrappedGrid::grid_size() << bits_; }
@@ -292,7 +283,7 @@ class DynamicGrid {
     std::unique_ptr<WrappedGrid>& meta_cell =
         meta_cells_[ToFlatIndex(meta_index, bits_)];
     if (meta_cell == nullptr) {
-      meta_cell = absl::make_unique<WrappedGrid>();
+      meta_cell.reset(new WrappedGrid());
     }
     const Eigen::Array3i inner_index =
         shifted_index - meta_index * WrappedGrid::grid_size();
@@ -340,7 +331,7 @@ class DynamicGrid {
 
     void AdvanceToEnd() { current_ = end_; }
 
-    const std::pair<Eigen::Array3i, ValueType> operator*() const {
+    std::pair<Eigen::Array3i, ValueType> operator*() const {
       return std::pair<Eigen::Array3i, ValueType>(GetCellIndex(), GetValue());
     }
 
@@ -427,17 +418,16 @@ class HybridGridBase : public GridBase<ValueType> {
   // multiple of the resolution.
   Eigen::Array3i GetCellIndex(const Eigen::Vector3f& point) const {
     Eigen::Array3f index = point.array() / resolution_;
-    return Eigen::Array3i(common::RoundToInt(index.x()),
-                          common::RoundToInt(index.y()),
-                          common::RoundToInt(index.z()));
+    return Eigen::Array3i(RoundToInt(index.x()), RoundToInt(index.y()),
+                          RoundToInt(index.z()));
   }
 
   // Returns one of the octants, (0, 0, 0), (1, 0, 0), ..., (1, 1, 1).
   static Eigen::Array3i GetOctant(const int i) {
     DCHECK_GE(i, 0);
     DCHECK_LT(i, 8);
-    return Eigen::Array3i(static_cast<bool>(i & 1), static_cast<bool>(i & 2),
-                          static_cast<bool>(i & 4));
+    return {static_cast<bool>(i & 1), static_cast<bool>(i & 2),
+            static_cast<bool>(i & 4)};
   }
 
   // Returns the center of the cell at 'index'.
@@ -455,96 +445,83 @@ class HybridGridBase : public GridBase<ValueType> {
   }
 
  private:
+  static int RoundToInt(double n) { return std::lround(n); }
+
+ private:
   // Edge length of each voxel.
   const float resolution_;
 };
 
-// A grid containing probability values stored using 15 bits, and an update
-// marker per voxel.
 // Points are expected to be close to the origin. Points far from the origin
 // require the grid to grow dynamically. For centimeter resolution, points
 // can only be tens of meters from the origin.
 // The hard limit of cell indexes is +/- 8192 around the origin.
-class HybridGrid : public HybridGridBase<uint16> {
+class HybridGrid : public HybridGridBase<PointCloudPtr> {
  public:
   explicit HybridGrid(const float resolution)
-      : HybridGridBase<uint16>(resolution) {}
+      : HybridGridBase<PointCloudPtr>(resolution) {}
 
-  explicit HybridGrid(const proto::HybridGrid& proto)
-      : HybridGrid(proto.resolution()) {
-    CHECK_EQ(proto.values_size(), proto.x_indices_size());
-    CHECK_EQ(proto.values_size(), proto.y_indices_size());
-    CHECK_EQ(proto.values_size(), proto.z_indices_size());
-    for (int i = 0; i < proto.values_size(); ++i) {
-      // SetProbability does some error checking for us.
-      SetProbability(Eigen::Vector3i(proto.x_indices(i), proto.y_indices(i),
-                                     proto.z_indices(i)),
-                     ValueToProbability(proto.values(i)));
+  PointCloudPtr GetSurroundedCloud(const Eigen::Vector3f pose) {
+    PointCloudPtr cloud_surround(new PointCloud);
+
+    auto pi_min = GetCellIndex(pose - kDist * Eigen::Vector3f::Ones());
+    auto pi_max = GetCellIndex(pose + kDist * Eigen::Vector3f::Ones());
+
+    // TODO
+    for (int i = pi_min.x(); i <= pi_max.x(); ++i) {
+      for (int j = pi_min.y(); j <= pi_max.y(); ++j) {
+        for (int k = pi_min.z(); k <= pi_max.z(); ++k) {
+          auto cloud_in_grid = this->value({i, j, k});
+          if (cloud_in_grid) {
+            *cloud_surround += *cloud_in_grid;
+          }
+        }
+      }
     }
+
+    return cloud_surround;
   }
 
-  // Sets the probability of the cell at 'index' to the given 'probability'.
-  void SetProbability(const Eigen::Array3i& index, const float probability) {
-    *mutable_value(index) = ProbabilityToValue(probability);
-  }
+  void InsertScan(const PointCloudPtr& scan,
+                  pcl::VoxelGrid<PointType>& filter) {
+    if (scan->size() == 0) return;
 
-  // Finishes the update sequence.
-  void FinishUpdate() {
-    while (!update_indices_.empty()) {
-      DCHECK_GE(*update_indices_.back(), kUpdateMarker);
-      *update_indices_.back() -= kUpdateMarker;
-      update_indices_.pop_back();
+    // 添加scan到点云
+    for (auto& point : *scan) {
+      PointCloudPtr& cloud_in_grid =
+          *this->mutable_value(GetCellIndex(point.getArray3fMap()));
+      if (!cloud_in_grid) cloud_in_grid.reset(new PointCloud);
+      cloud_in_grid->push_back(point);
     }
-  }
 
-  // Applies the 'odds' specified when calling ComputeLookupTableToApplyOdds()
-  // to the probability of the cell at 'index' if the cell has not already been
-  // updated. Multiple updates of the same cell will be ignored until
-  // FinishUpdate() is called. Returns true if the cell was updated.
-  //
-  // If this is the first call to ApplyOdds() for the specified cell, its value
-  // will be set to probability corresponding to 'odds'.
-  bool ApplyLookupTable(const Eigen::Array3i& index,
-                        const std::vector<uint16>& table) {
-    DCHECK_EQ(table.size(), kUpdateMarker);
-    uint16* const cell = mutable_value(index);
-    if (*cell >= kUpdateMarker) {
-      return false;
+    // 降采样
+    auto p_min = scan->at(0).getArray3fMap();
+    auto p_max = scan->at(1).getArray3fMap();
+    for (auto& point : *scan) {
+      p_min = p_min.min(point.getArray3fMap());
+      p_max = p_max.max(point.getArray3fMap());
     }
-    update_indices_.push_back(cell);
-    *cell = table[*cell];
-    DCHECK_GE(*cell, kUpdateMarker);
-    return true;
-  }
 
-  // Returns the probability of the cell with 'index'.
-  float GetProbability(const Eigen::Array3i& index) const {
-    return ValueToProbability(value(index));
-  }
+    auto pi_min = GetCellIndex(p_min);
+    auto pi_max = GetCellIndex(p_max);
 
-  // Returns true if the probability at the specified 'index' is known.
-  bool IsKnown(const Eigen::Array3i& index) const { return value(index) != 0; }
-
-  proto::HybridGrid ToProto() const {
-    CHECK(update_indices_.empty()) << "Serializing a grid during an update is "
-                                      "not supported. Finish the update first.";
-    proto::HybridGrid result;
-    result.set_resolution(resolution());
-    for (const auto it : *this) {
-      result.add_x_indices(it.first.x());
-      result.add_y_indices(it.first.y());
-      result.add_z_indices(it.first.z());
-      result.add_values(it.second);
+    // TODO
+    for (int i = pi_min.x(); i <= pi_max.x(); ++i) {
+      for (int j = pi_min.y(); j <= pi_max.y(); ++j) {
+        for (int k = pi_min.z(); k <= pi_max.z(); ++k) {
+          auto cloud_in_grid = this->value({i, j, k});
+          if (cloud_in_grid) {
+            filter.setInputCloud(cloud_in_grid);
+            // TODO
+            filter.filter(*cloud_in_grid);
+          }
+        }
+      }
     }
-    return result;
   }
 
  private:
-  // Markers at changed cells.
-  std::vector<ValueType*> update_indices_;
+  const double kDist = 100.0;
 };
 
-}  // namespace mapping
-}  // namespace cartographer
-
-#endif  // CARTOGRAPHER_MAPPING_3D_HYBRID_GRID_H_
+#endif  // ALOAM_VELODYNE_HYBRID_GRID_H
