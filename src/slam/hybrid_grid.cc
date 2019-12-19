@@ -14,9 +14,6 @@
  * limitations under the License.
  */
 
-#ifndef ALOAM_VELODYNE_HYBRID_GRID_H
-#define ALOAM_VELODYNE_HYBRID_GRID_H
-
 #include <Eigen/Core>
 #include <array>
 #include <cmath>
@@ -25,7 +22,11 @@
 #include <utility>
 #include <vector>
 
+#include <pcl/filters/voxel_grid.h>
+
+#include "common/common.h"
 #include "glog/logging.h"
+#include "slam/hybrid_grid.h"
 
 // Converts an 'index' with each dimension from 0 to 2^'bits' - 1 to a flat
 // z-major index.
@@ -456,9 +457,9 @@ class HybridGridBase : public GridBase<ValueType> {
 // require the grid to grow dynamically. For centimeter resolution, points
 // can only be tens of meters from the origin.
 // The hard limit of cell indexes is +/- 8192 around the origin.
-class HybridGrid : public HybridGridBase<PointCloudPtr> {
+class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
  public:
-  explicit HybridGrid(const float resolution)
+  explicit HybridGridImpl(const float resolution)
       : HybridGridBase<PointCloudPtr>(resolution) {}
 
   PointCloudPtr GetSurroundedCloud(const Eigen::Vector3f pose) {
@@ -524,4 +525,16 @@ class HybridGrid : public HybridGridBase<PointCloudPtr> {
   const double kDist = 100.0;
 };
 
-#endif  // ALOAM_VELODYNE_HYBRID_GRID_H
+HybridGrid::HybridGrid(const float resolution)
+    : hybrid_grid_(new HybridGridImpl(resolution)) {}
+
+HybridGrid::~HybridGrid() { delete hybrid_grid_; }
+
+PointCloudPtr HybridGrid::GetSurroundedCloud(const Eigen::Vector3f pose) {
+  return hybrid_grid_->GetSurroundedCloud(pose);
+}
+
+void HybridGrid::InsertScan(const PointCloudPtr& scan,
+                            pcl::VoxelGrid<PointType>& filter) {
+  hybrid_grid_->InsertScan(scan, filter);
+}
