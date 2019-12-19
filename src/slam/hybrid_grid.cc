@@ -483,8 +483,7 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
     return cloud_surround;
   }
 
-  void InsertScan(const PointCloudPtr& scan,
-                  pcl::VoxelGrid<PointType>& filter) {
+  void InsertScan(const PointCloudPtr& scan, pcl::Filter<PointType>& filter) {
     if (scan->size() == 0) return;
 
     // 添加scan到点云
@@ -525,16 +524,16 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
   const double kDist = 100.0;
 };
 
-HybridGrid::HybridGrid(const float resolution)
+HybridGrid::HybridGrid(const float& resolution)
     : hybrid_grid_(new HybridGridImpl(resolution)) {}
 
 HybridGrid::~HybridGrid() { delete hybrid_grid_; }
 
-PointCloudPtr HybridGrid::GetSurroundedCloud(const Eigen::Vector3f pose) {
+PointCloudPtr HybridGrid::GetSurroundedCloud(const Eigen::Vector3f& pose) {
   return hybrid_grid_->GetSurroundedCloud(pose);
 }
 
 void HybridGrid::InsertScan(const PointCloudPtr& scan,
-                            pcl::VoxelGrid<PointType>& filter) {
+                            pcl::Filter<PointType>& filter) {
   hybrid_grid_->InsertScan(scan, filter);
 }
