@@ -17,6 +17,7 @@
 #ifndef ALOAM_VELODYNE_HYBRID_GRID_H
 #define ALOAM_VELODYNE_HYBRID_GRID_H
 
+#include <common/rigid_transform.h>
 #include "common/common.h"
 
 class HybridGridImpl;
@@ -26,7 +27,8 @@ class HybridGrid {
   explicit HybridGrid(const float& resolution);
   ~HybridGrid();
 
-  PointCloudPtr GetSurroundedCloud(const Eigen::Vector3f& pose);
+  PointCloudPtr GetSurroundedCloud(const PointCloudPtr& scan,
+                                   const Rigid3d& pose);
 
   void InsertScan(const PointCloudPtr& scan, pcl::Filter<PointType>& filter);
 
