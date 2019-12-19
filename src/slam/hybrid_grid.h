@@ -23,12 +23,12 @@ class HybridGridImpl;
 
 class HybridGrid {
  public:
-  explicit HybridGrid(const float resolution);
+  explicit HybridGrid(const float& resolution);
   ~HybridGrid();
 
-  PointCloudPtr GetSurroundedCloud(const Eigen::Vector3f pose);
+  PointCloudPtr GetSurroundedCloud(const Eigen::Vector3f& pose);
 
-  void InsertScan(const PointCloudPtr& scan, pcl::VoxelGrid<PointType>& filter);
+  void InsertScan(const PointCloudPtr& scan, pcl::Filter<PointType>& filter);
 
  private:
   HybridGridImpl* hybrid_grid_;

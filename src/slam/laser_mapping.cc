@@ -463,6 +463,10 @@ void process() {
 }
 
 int main(int argc, char **argv) {
+  FLAGS_alsologtostderr = true;
+  FLAGS_colorlogtostderr = true;
+  google::InitGoogleLogging(argv[0]);
+  google::ParseCommandLineFlags(&argc, &argv, true);
   ros::init(argc, argv, "laserMapping");
   ros::NodeHandle nh;
 
