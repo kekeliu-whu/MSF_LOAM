@@ -17,6 +17,8 @@
 #ifndef ALOAM_VELODYNE_HYBRID_GRID_H
 #define ALOAM_VELODYNE_HYBRID_GRID_H
 
+#include <pcl/filters/filter.h>
+
 #include <common/rigid_transform.h>
 #include "common/common.h"
 

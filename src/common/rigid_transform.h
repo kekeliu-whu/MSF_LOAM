@@ -117,4 +117,14 @@ std::ostream& operator<<(std::ostream& os, const Rigid3<T>& rigid) {
 using Rigid3d = Rigid3<double>;
 using Rigid3f = Rigid3<float>;
 
+#include "common/common.h"
+
+inline PointType operator*(const Rigid3d& transform, const PointType& point) {
+  PointType point_out;
+  point_out.intensity = point.intensity;
+  point_out.getVector3fMap() =
+      (transform * point.getVector3fMap().cast<double>()).cast<float>();
+  return point_out;
+}
+
 #endif  // LOAM_VELODYNE_RIGID_TRANSFORM_H
