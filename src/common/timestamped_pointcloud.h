@@ -16,7 +16,8 @@
 struct TimestampedPointCloud {
   ros::Time timestamp;
   std::string frame_id;
-  Rigid3d global_posse;
+  Rigid3d global_pose;
+
   PointCloudPtr cloud_full_res;
   PointCloudPtr cloud_corner_sharp;
   PointCloudPtr cloud_corner_less_sharp;
