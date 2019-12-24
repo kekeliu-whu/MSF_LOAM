@@ -42,9 +42,6 @@ void TransformToStart(const PointType &pi, PointType &po,
 bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
                                 const TimestampedPointCloud &scan_curr,
                                 Rigid3d *pose_estimate_curr2last) {
-  Eigen::Quaterniond &r_curr2last = pose_estimate_curr2last->rotation();
-  Eigen::Vector3d &t_curr2last = pose_estimate_curr2last->translation();
-
   PointCloudConstPtr cloud_corner_sharp = scan_curr.cloud_corner_sharp;
   PointCloudConstPtr cloud_corner_less_sharp =
       scan_curr.cloud_corner_less_sharp;
@@ -76,9 +73,10 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
     ceres::Problem::Options problem_options;
 
     ceres::Problem problem(problem_options);
-    problem.AddParameterBlock(r_curr2last.coeffs().data(), 4,
-                              q_parameterization);
-    problem.AddParameterBlock(t_curr2last.data(), 3);
+    problem.AddParameterBlock(
+        pose_estimate_curr2last->rotation().coeffs().data(), 4,
+        q_parameterization);
+    problem.AddParameterBlock(pose_estimate_curr2last->translation().data(), 3);
 
     PointType pointSel;
     std::vector<int> pointSearchInd;
@@ -172,9 +170,12 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
               kScanPeriod;
         else
           s = 1.0;
+        ceres::CostFunction *cost_function =
+            LidarEdgeFactor::Create(curr_point, last_point_a, last_point_b, s);
         problem.AddResidualBlock(
-            LidarEdgeFactor::Create(curr_point, last_point_a, last_point_b, s),
-            loss_function, r_curr2last.coeffs().data(), t_curr2last.data());
+            cost_function, loss_function,
+            pose_estimate_curr2last->rotation().coeffs().data(),
+            pose_estimate_curr2last->translation().data());
         corner_correspondence++;
       }
     }
@@ -275,10 +276,12 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
                 kScanPeriod;
           else
             s = 1.0;
+          ceres::CostFunction *cost_function = LidarPlaneFactor::Create(
+              curr_point, last_point_a, last_point_b, last_point_c, s);
           problem.AddResidualBlock(
-              LidarPlaneFactor::Create(curr_point, last_point_a, last_point_b,
-                                       last_point_c, s),
-              loss_function, r_curr2last.coeffs().data(), t_curr2last.data());
+              cost_function, loss_function,
+              pose_estimate_curr2last->rotation().coeffs().data(),
+              pose_estimate_curr2last->translation().data());
           plane_correspondence++;
         }
       }

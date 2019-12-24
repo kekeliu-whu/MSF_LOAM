@@ -522,7 +522,7 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
 
  private:
   const double kDist = 60.0;
-  const double kDistFlann = 1.1;
+  // const double kDistFlann = 1.1;
 };
 
 HybridGrid::HybridGrid(const float& resolution)
