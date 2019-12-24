@@ -62,20 +62,6 @@ int frameCount = 0;
 HybridGrid hybrid_grid_map_corner(5.0);
 HybridGrid hybrid_grid_map_surf(5.0);
 
-// input: from odom
-PointCloudPtr laserCloudCornerLast(new PointCloud);
-PointCloudPtr laserCloudSurfLast(new PointCloud);
-
-// ouput: all visualble cube points
-PointCloudPtr laserCloudSurround(new PointCloud);
-
-// surround points in map to build tree
-PointCloudPtr laserCloudCornerFromMap(new PointCloud);
-PointCloudPtr laserCloudSurfFromMap(new PointCloud);
-
-// input & output: points in one frame. local --> global
-PointCloudPtr laserCloudFullRes(new PointCloud);
-
 // Transformation from scan to odom's world frame
 Rigid3d pose_odom_scan2world;
 
@@ -93,12 +79,10 @@ std::queue<nav_msgs::Odometry::ConstPtr> odometryBuf;
 pcl::VoxelGrid<PointType> downSizeFilterCorner;
 pcl::VoxelGrid<PointType> downSizeFilterSurf;
 
-ros::Publisher pubLaserCloudSurround, pubLaserCloudMap, pubLaserCloudFullRes,
-    pubOdomAftMapped, pubOdomAftMappedHighFrec, pubLaserAfterMappedPath;
+ros::Publisher pubLaserCloudSurround, pubLaserCloudFullRes, pubOdomAftMapped,
+    pubOdomAftMappedHighFrec, pubLaserAfterMappedPath;
 
 nav_msgs::Path laserAfterMappedPath;
-
-}  // namespace
 
 // set initial guess
 void transformAssociateToMap() {
@@ -108,6 +92,8 @@ void transformAssociateToMap() {
 void transformUpdate() {
   pose_odom2map = pose_map_scan2world * pose_odom_scan2world.inverse();
 }
+
+}  // namespace
 
 void laserCloudCornerLastHandler(
     const sensor_msgs::PointCloud2ConstPtr &laserCloudCornerLast2) {
@@ -185,6 +171,13 @@ void process() {
         break;
       }
 
+      // input: from odom
+      PointCloudPtr laserCloudCornerLast(new PointCloud);
+      PointCloudPtr laserCloudSurfLast(new PointCloud);
+
+      // input & output: points in one frame. local --> global
+      PointCloudPtr laserCloudFullRes(new PointCloud);
+
       pcl::fromROSMsg(*cornerLastBuf.front(), *laserCloudCornerLast);
       cornerLastBuf.pop();
 
@@ -208,10 +201,12 @@ void process() {
       transformAssociateToMap();
 
       TicToc t_shift;
-      laserCloudCornerFromMap = hybrid_grid_map_corner.GetSurroundedCloud(
-          laserCloudCornerLast, pose_map_scan2world);
-      laserCloudSurfFromMap = hybrid_grid_map_surf.GetSurroundedCloud(
-          laserCloudSurfLast, pose_map_scan2world);
+      PointCloudPtr laserCloudCornerFromMap =
+          hybrid_grid_map_corner.GetSurroundedCloud(laserCloudCornerLast,
+                                                    pose_map_scan2world);
+      PointCloudPtr laserCloudSurfFromMap =
+          hybrid_grid_map_surf.GetSurroundedCloud(laserCloudSurfLast,
+                                                  pose_map_scan2world);
       LOG_STEP_TIME("MAP", "Collect surround cloud", t_shift.toc());
 
       downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
@@ -225,7 +220,6 @@ void process() {
                 << ", surf=" << laserCloudSurfFromMap->size();
       if (laserCloudCornerFromMap->size() > 10 &&
           laserCloudSurfFromMap->size() > 50) {
-        // TODO
         TimestampedPointCloud cloud_map, scan_curr;
         cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
         cloud_map.cloud_surf_less_flat = laserCloudSurfFromMap;
@@ -255,8 +249,8 @@ void process() {
       LOG_STEP_TIME("MAP", "add points", t_add.toc());
 
       // publish surround map for every 5 frame
+      PointCloudPtr laserCloudSurround(new PointCloud);
       if (frameCount % 5 == 0) {
-        laserCloudSurround->clear();
         *laserCloudSurround += *laserCloudCornerFromMap;
         *laserCloudSurround += *laserCloudSurfFromMap;
 
@@ -351,9 +345,6 @@ int main(int argc, char **argv) {
 
   pubLaserCloudSurround =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 100);
-
-  pubLaserCloudMap =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_map", 100);
 
   pubLaserCloudFullRes =
       nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_registered", 100);
