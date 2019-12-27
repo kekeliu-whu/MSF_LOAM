@@ -227,11 +227,9 @@ int main(int argc, char **argv) {
     laserPath.header.frame_id = "/camera_init";
     laser_path_publisher.publish(laserPath);
 
-    std::swap(g_cloud_last, g_cloud_curr);
-
     if (curr_frame_idx % g_skip_frame_num == 0) {
       sensor_msgs::PointCloud2 laserCloudCornerLast2;
-      pcl::toROSMsg(*g_cloud_last.cloud_corner_less_sharp,
+      pcl::toROSMsg(*g_cloud_curr.cloud_corner_less_sharp,
                     laserCloudCornerLast2);
       laserCloudCornerLast2.header.stamp =
           ros::Time().fromSec(timeSurfPointsLessFlat);
@@ -255,6 +253,9 @@ int main(int argc, char **argv) {
 
     g_cloud_curr.odom_pose = g_pose_scan2world;
     laser_mapper->AddLaserOdometryResult(g_cloud_curr);
+
+    std::swap(g_cloud_last, g_cloud_curr);
+
     LOG_STEP_TIME("ODO", "publication", t_pub.toc());
     LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
     if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
