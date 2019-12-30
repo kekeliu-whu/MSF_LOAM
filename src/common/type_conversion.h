@@ -5,11 +5,11 @@
 #ifndef ALOAM_VELODYNE_TYPE_CONVERSION_H
 #define ALOAM_VELODYNE_TYPE_CONVERSION_H
 
-#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseWithCovariance.h>
 
 #include "common/rigid_transform.h"
 
-Rigid3d FromRos(const geometry_msgs::PoseWithCovariance &pose_msg) {
+inline Rigid3d FromRos(const geometry_msgs::PoseWithCovariance &pose_msg) {
   Rigid3d pose;
   pose.translation().x() = pose_msg.pose.position.x;
   pose.translation().y() = pose_msg.pose.position.y;
@@ -21,7 +21,7 @@ Rigid3d FromRos(const geometry_msgs::PoseWithCovariance &pose_msg) {
   return pose;
 }
 
-geometry_msgs::PoseWithCovariance ToRos(const Rigid3d &pose) {
+inline geometry_msgs::PoseWithCovariance ToRos(const Rigid3d &pose) {
   geometry_msgs::PoseWithCovariance pose_msg;
   pose_msg.pose.position.x = pose.translation().x();
   pose_msg.pose.position.y = pose.translation().y();

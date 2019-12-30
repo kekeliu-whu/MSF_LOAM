@@ -1,348 +1,33 @@
-// This is an advanced implementation of the algorithm described in the
-// following paper:
-//   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
-//     Robotics: Science and Systems Conference (RSS). Berkeley, CA, July 2014.
-
-// Modifier: Tong Qin               qintonguav@gmail.com
-// 	         Shaozu Cao 		    saozu.cao@connect.ust.hk
-
-// Copyright 2013, Ji Zhang, Carnegie Mellon University
-// Further contributions copyright (c) 2016, Southwest Research Institute
-// All rights reserved.
 //
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are met:
+// Created by whu on 12/24/19.
 //
-// 1. Redistributions of source code must retain the above copyright notice,
-//    this list of conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice,
-//    this list of conditions and the following disclaimer in the documentation
-//    and/or other materials provided with the distribution.
-// 3. Neither the name of the copyright holder nor the names of its
-//    contributors may be used to endorse or promote products derived from this
-//    software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-// ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-// LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-// POSSIBILITY OF SUCH DAMAGE.
 
+#include <common/tic_toc.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
-#include <nav_msgs/Path.h>
-#include <pcl/filters/voxel_grid.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <ros/ros.h>
-#include <sensor_msgs/PointCloud2.h>
+#include <ros/init.h>
 #include <tf/transform_broadcaster.h>
-#include <tf/transform_datatypes.h>
-#include <queue>
-#include <thread>
-#include <vector>
 
-#include "common/common.h"
-#include "common/rigid_transform.h"
-#include "common/tic_toc.h"
-#include "common/timestamped_pointcloud.h"
 #include "common/type_conversion.h"
-#include "slam/hybrid_grid.h"
+#include "laser_mapping.h"
 #include "slam/scan_matching/mapping_scan_matcher.h"
 
-namespace {
-
-int frameCount = 0;
-
-HybridGrid hybrid_grid_map_corner(5.0);
-HybridGrid hybrid_grid_map_surf(5.0);
-
-// Transformation from scan to odom's world frame
-Rigid3d pose_odom_scan2world;
-
-// Transformation from scan to map's world frame
-Rigid3d pose_map_scan2world;
-
-// Transformation between odom's world and map's world frame
-Rigid3d pose_odom2map;
-
-std::queue<sensor_msgs::PointCloud2ConstPtr> cornerLastBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> surfLastBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> fullResBuf;
-std::queue<nav_msgs::Odometry::ConstPtr> odometryBuf;
-
-pcl::VoxelGrid<PointType> downSizeFilterCorner;
-pcl::VoxelGrid<PointType> downSizeFilterSurf;
-
-ros::Publisher pubLaserCloudSurround, pubLaserCloudFullRes, pubOdomAftMapped,
-    pubOdomAftMappedHighFrec, pubLaserAfterMappedPath;
-
-nav_msgs::Path laserAfterMappedPath;
-
-// set initial guess
-void transformAssociateToMap() {
-  pose_map_scan2world = pose_odom2map * pose_odom_scan2world;
-}
-
-void transformUpdate() {
-  pose_odom2map = pose_map_scan2world * pose_odom_scan2world.inverse();
-}
-
-}  // namespace
-
-void laserCloudCornerLastHandler(
-    const sensor_msgs::PointCloud2ConstPtr &laserCloudCornerLast2) {
-  cornerLastBuf.push(laserCloudCornerLast2);
-}
-
-void laserCloudSurfLastHandler(
-    const sensor_msgs::PointCloud2ConstPtr &laserCloudSurfLast2) {
-  surfLastBuf.push(laserCloudSurfLast2);
-}
-
-void laserCloudFullResHandler(
-    const sensor_msgs::PointCloud2ConstPtr &laserCloudFullRes2) {
-  fullResBuf.push(laserCloudFullRes2);
-}
-
-// receive odomtry
-void laserOdometryHandler(const nav_msgs::Odometry::ConstPtr &laserOdometry) {
-  odometryBuf.push(laserOdometry);
-
-  // high frequence publish
-  nav_msgs::Odometry odomAftMapped;
-  odomAftMapped.child_frame_id = "/aft_mapped";
-  odomAftMapped.header.frame_id = "/camera_init";
-  odomAftMapped.header.stamp = laserOdometry->header.stamp;
-  odomAftMapped.pose = ToRos(pose_odom2map * FromRos(laserOdometry->pose));
-  pubOdomAftMappedHighFrec.publish(odomAftMapped);
-}
-
-void process() {
-  while (ros::ok()) {
-    while (!cornerLastBuf.empty() && !surfLastBuf.empty() &&
-           !fullResBuf.empty() && !odometryBuf.empty()) {
-      // sync odometryBuf to cornerLastBuf
-      while (!odometryBuf.empty() &&
-             odometryBuf.front()->header.stamp.toSec() <
-                 cornerLastBuf.front()->header.stamp.toSec())
-        odometryBuf.pop();
-      if (odometryBuf.empty()) {
-        break;
-      }
-
-      // sync surfLastBuf to cornerLastBuf
-      while (!surfLastBuf.empty() &&
-             surfLastBuf.front()->header.stamp.toSec() <
-                 cornerLastBuf.front()->header.stamp.toSec())
-        surfLastBuf.pop();
-      if (surfLastBuf.empty()) {
-        break;
-      }
-
-      // sync fullResBuf to cornerLastBuf
-      while (!fullResBuf.empty() &&
-             fullResBuf.front()->header.stamp.toSec() <
-                 cornerLastBuf.front()->header.stamp.toSec())
-        fullResBuf.pop();
-      if (fullResBuf.empty()) {
-        break;
-      }
-
-      double timeLaserCloudCornerLast =
-          cornerLastBuf.front()->header.stamp.toSec();
-      double timeLaserCloudSurfLast = surfLastBuf.front()->header.stamp.toSec();
-      double timeLaserCloudFullRes = fullResBuf.front()->header.stamp.toSec();
-      double timeLaserOdometry = odometryBuf.front()->header.stamp.toSec();
-
-      if (timeLaserCloudCornerLast != timeLaserOdometry ||
-          timeLaserCloudSurfLast != timeLaserOdometry ||
-          timeLaserCloudFullRes != timeLaserOdometry) {
-        LOG(WARNING) << "[MAP] unsync message: "
-                     << "corner=" << timeLaserCloudCornerLast
-                     << ", surf=" << timeLaserCloudSurfLast
-                     << ", full=" << timeLaserCloudFullRes
-                     << ", odom=" << timeLaserOdometry;
-        break;
-      }
-
-      // input: from odom
-      PointCloudPtr laserCloudCornerLast(new PointCloud);
-      PointCloudPtr laserCloudSurfLast(new PointCloud);
-
-      // input & output: points in one frame. local --> global
-      PointCloudPtr laserCloudFullRes(new PointCloud);
-
-      pcl::fromROSMsg(*cornerLastBuf.front(), *laserCloudCornerLast);
-      cornerLastBuf.pop();
-
-      pcl::fromROSMsg(*surfLastBuf.front(), *laserCloudSurfLast);
-      surfLastBuf.pop();
-
-      pcl::fromROSMsg(*fullResBuf.front(), *laserCloudFullRes);
-      fullResBuf.pop();
-
-      pose_odom_scan2world = FromRos(odometryBuf.front()->pose);
-      odometryBuf.pop();
-
-      while (!cornerLastBuf.empty()) {
-        cornerLastBuf.pop();
-        LOG(WARNING)
-            << "[MAP] drop lidar frame in mapping for real time performance";
-      }
-
-      TicToc t_whole;
-
-      transformAssociateToMap();
-
-      TicToc t_shift;
-      PointCloudPtr laserCloudCornerFromMap =
-          hybrid_grid_map_corner.GetSurroundedCloud(laserCloudCornerLast,
-                                                    pose_map_scan2world);
-      PointCloudPtr laserCloudSurfFromMap =
-          hybrid_grid_map_surf.GetSurroundedCloud(laserCloudSurfLast,
-                                                  pose_map_scan2world);
-      LOG_STEP_TIME("MAP", "Collect surround cloud", t_shift.toc());
-
-      downSizeFilterCorner.setInputCloud(laserCloudCornerLast);
-      downSizeFilterCorner.filter(*laserCloudCornerLast);
-
-      downSizeFilterSurf.setInputCloud(laserCloudSurfLast);
-      downSizeFilterSurf.filter(*laserCloudSurfLast);
-
-      LOG(INFO) << "[MAP]"
-                << " corner=" << laserCloudCornerFromMap->size()
-                << ", surf=" << laserCloudSurfFromMap->size();
-      if (laserCloudCornerFromMap->size() > 10 &&
-          laserCloudSurfFromMap->size() > 50) {
-        TimestampedPointCloud cloud_map, scan_curr;
-        cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
-        cloud_map.cloud_surf_less_flat = laserCloudSurfFromMap;
-        scan_curr.cloud_corner_less_sharp = laserCloudCornerLast;
-        scan_curr.cloud_surf_less_flat = laserCloudSurfLast;
-        MappingScanMatcher::Match(cloud_map, scan_curr, &pose_map_scan2world);
-      } else {
-        LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
-      }
-      transformUpdate();
-
-      TicToc t_add;
-
-      for (size_t i = 0; i < laserCloudCornerLast->size(); i++) {
-        laserCloudCornerLast->points[i] =
-            pose_map_scan2world * laserCloudCornerLast->points[i];
-      }
-      hybrid_grid_map_corner.InsertScan(laserCloudCornerLast,
-                                        downSizeFilterCorner);
-
-      for (size_t i = 0; i < laserCloudSurfLast->size(); i++) {
-        laserCloudSurfLast->points[i] =
-            pose_map_scan2world * laserCloudSurfLast->points[i];
-      }
-      hybrid_grid_map_surf.InsertScan(laserCloudSurfLast, downSizeFilterSurf);
-
-      LOG_STEP_TIME("MAP", "add points", t_add.toc());
-
-      // publish surround map for every 5 frame
-      PointCloudPtr laserCloudSurround(new PointCloud);
-      if (frameCount % 5 == 0) {
-        *laserCloudSurround += *laserCloudCornerFromMap;
-        *laserCloudSurround += *laserCloudSurfFromMap;
-
-        sensor_msgs::PointCloud2 laserCloudSurround3;
-        pcl::toROSMsg(*laserCloudSurround, laserCloudSurround3);
-        laserCloudSurround3.header.stamp =
-            ros::Time().fromSec(timeLaserOdometry);
-        laserCloudSurround3.header.frame_id = "/camera_init";
-        pubLaserCloudSurround.publish(laserCloudSurround3);
-      }
-
-      int laserCloudFullResNum = laserCloudFullRes->size();
-      for (int i = 0; i < laserCloudFullResNum; i++) {
-        laserCloudFullRes->points[i] =
-            pose_map_scan2world * laserCloudFullRes->points[i];
-      }
-
-      sensor_msgs::PointCloud2 laserCloudFullRes3;
-      pcl::toROSMsg(*laserCloudFullRes, laserCloudFullRes3);
-      laserCloudFullRes3.header.stamp = ros::Time().fromSec(timeLaserOdometry);
-      laserCloudFullRes3.header.frame_id = "/camera_init";
-      pubLaserCloudFullRes.publish(laserCloudFullRes3);
-
-      LOG_STEP_TIME("MAP", "whole mapping", t_whole.toc());
-
-      nav_msgs::Odometry odomAftMapped;
-      odomAftMapped.header.frame_id = "/camera_init";
-      odomAftMapped.header.stamp = ros::Time().fromSec(timeLaserOdometry);
-      odomAftMapped.child_frame_id = "/aft_mapped";
-      odomAftMapped.pose = ToRos(pose_map_scan2world);
-      pubOdomAftMapped.publish(odomAftMapped);
-
-      geometry_msgs::PoseStamped laserAfterMappedPose;
-      laserAfterMappedPose.header = odomAftMapped.header;
-      laserAfterMappedPose.pose = odomAftMapped.pose.pose;
-      laserAfterMappedPath.header.stamp = odomAftMapped.header.stamp;
-      laserAfterMappedPath.header.frame_id = "/camera_init";
-      laserAfterMappedPath.poses.push_back(laserAfterMappedPose);
-      pubLaserAfterMappedPath.publish(laserAfterMappedPath);
-
-      static tf::TransformBroadcaster br;
-      tf::Transform transform;
-      transform.setOrigin({pose_map_scan2world.translation().x(),
-                           pose_map_scan2world.translation().y(),
-                           pose_map_scan2world.translation().z()});
-      transform.setRotation({pose_map_scan2world.rotation().x(),
-                             pose_map_scan2world.rotation().y(),
-                             pose_map_scan2world.rotation().z(),
-                             pose_map_scan2world.rotation().w()});
-      br.sendTransform(tf::StampedTransform(transform,
-                                            odomAftMapped.header.stamp,
-                                            "/camera_init", "/aft_mapped"));
-
-      frameCount++;
-    }
-    std::chrono::milliseconds dura(2);
-    std::this_thread::sleep_for(dura);
-  }
-}
-
-int main(int argc, char **argv) {
-  FLAGS_alsologtostderr = true;
-  FLAGS_colorlogtostderr = true;
-  google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, true);
-  ros::init(argc, argv, "laserMapping");
-  ros::NodeHandle nh;
-
-  float lineRes = 0;
-  float planeRes = 0;
-  nh.param<float>("mapping_line_resolution", lineRes, 0.4);
-  nh.param<float>("mapping_plane_resolution", planeRes, 0.8);
+LaserMapping::LaserMapping(ros::NodeHandle &nh)
+    : frame_idx_cur_(0),
+      hybrid_grid_map_corner_(5.0),
+      hybrid_grid_map_surf_(5.0) {
+  // get leaf size
+  float line_res = 0;
+  float plane_res = 0;
+  nh.param<float>("mapping_line_resolution", line_res, 0.4);
+  nh.param<float>("mapping_plane_resolution", plane_res, 0.8);
   LOG(INFO) << "[MAP]"
-            << " line resolution " << lineRes << " plane resolution "
-            << planeRes;
-  downSizeFilterCorner.setLeafSize(lineRes, lineRes, lineRes);
-  downSizeFilterSurf.setLeafSize(planeRes, planeRes, planeRes);
-
-  ros::Subscriber subLaserCloudCornerLast =
-      nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_corner_last", 100,
-                                             laserCloudCornerLastHandler);
-
-  ros::Subscriber subLaserCloudSurfLast =
-      nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 100,
-                                             laserCloudSurfLastHandler);
-
-  ros::Subscriber subLaserOdometry = nh.subscribe<nav_msgs::Odometry>(
-      "/laser_odom_to_init", 100, laserOdometryHandler);
-
-  ros::Subscriber subLaserCloudFullRes = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/velodyne_cloud_3", 100, laserCloudFullResHandler);
-
+            << " line resolution " << line_res << " plane resolution "
+            << plane_res;
+  downsize_filter_corner_.setLeafSize(line_res, line_res, line_res);
+  downsize_filter_surf_.setLeafSize(plane_res, plane_res, plane_res);
+  // set publishers
   pubLaserCloudSurround =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 100);
 
@@ -357,10 +42,158 @@ int main(int argc, char **argv) {
 
   pubLaserAfterMappedPath =
       nh.advertise<nav_msgs::Path>("/aft_mapped_path", 100);
+  // RUN
+  thread_ = std::thread([this] { this->Run(); });
+}
 
-  std::thread mapping_process{process};
+LaserMapping::~LaserMapping() {
+  // todo
+  thread_.join();
+}
 
-  ros::spin();
+void LaserMapping::AddLaserOdometryResult(
+    const LaserOdometryResultType &laser_odometry_result) {
+  std::unique_lock<std::mutex> ul(mutex_);
+  odometry_result_queue_.push(laser_odometry_result);
+  cv_.notify_one();
+  // todo
+  // publish odom tf
+  // high frequence publish
+  nav_msgs::Odometry odomAftMapped;
+  odomAftMapped.child_frame_id = "/aft_mapped";
+  odomAftMapped.header.frame_id = "/camera_init";
+  odomAftMapped.header.stamp = laser_odometry_result.timestamp;
+  odomAftMapped.pose = ToRos(pose_odom2map_ * laser_odometry_result.odom_pose);
+  pubOdomAftMappedHighFrec.publish(odomAftMapped);
+}
 
-  return 0;
+void LaserMapping::Run() {
+  while (ros::ok()) {
+    LaserOdometryResultType odom_result;
+    {
+      std::unique_lock<std::mutex> ul(mutex_);
+      // Try to get new messages in 50 ms, return false if failed
+      bool is_msg_recv = cv_.wait_for(
+          ul, std::chrono::milliseconds(50),
+          [this] { return !this->odometry_result_queue_.empty(); });
+      if (!is_msg_recv) continue;
+      odom_result = odometry_result_queue_.front();
+      odometry_result_queue_.pop();
+      // Comment the following snippet to enable full pose estimation
+      while (!odometry_result_queue_.empty()) {
+        LOG(WARNING)
+            << "[MAP] drop lidar frame in mapping for real time performance";
+        odometry_result_queue_.pop();
+      }
+    }
+
+    // scan match
+    // input: from odom
+    PointCloudConstPtr laserCloudCornerLast =
+        odom_result.cloud_corner_less_sharp;
+    PointCloudConstPtr laserCloudSurfLast = odom_result.cloud_surf_less_flat;
+    PointCloudConstPtr laserCloudFullRes = odom_result.cloud_full_res;
+
+    pose_odom_scan2world_ = odom_result.odom_pose;
+
+    TicToc t_whole;
+
+    transformAssociateToMap();
+
+    TicToc t_shift;
+    PointCloudPtr laserCloudCornerFromMap =
+        hybrid_grid_map_corner_.GetSurroundedCloud(laserCloudCornerLast,
+                                                   pose_map_scan2world_);
+    PointCloudPtr laserCloudSurfFromMap =
+        hybrid_grid_map_surf_.GetSurroundedCloud(laserCloudSurfLast,
+                                                 pose_map_scan2world_);
+    LOG_STEP_TIME("MAP", "Collect surround cloud", t_shift.toc());
+
+    PointCloudPtr laserCloudCornerLastStack(new PointCloud);
+    downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
+    downsize_filter_corner_.filter(*laserCloudCornerLastStack);
+
+    PointCloudPtr laserCloudSurfLastStack(new PointCloud);
+    downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
+    downsize_filter_surf_.filter(*laserCloudSurfLastStack);
+
+    LOG(INFO) << "[MAP]"
+              << " corner=" << laserCloudCornerFromMap->size()
+              << ", surf=" << laserCloudSurfFromMap->size();
+    if (laserCloudCornerFromMap->size() > 10 &&
+        laserCloudSurfFromMap->size() > 50) {
+      TimestampedPointCloud cloud_map, scan_curr;
+      cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
+      cloud_map.cloud_surf_less_flat = laserCloudSurfFromMap;
+      scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
+      scan_curr.cloud_surf_less_flat = laserCloudSurfLastStack;
+      MappingScanMatcher::Match(cloud_map, scan_curr, &pose_map_scan2world_);
+    } else {
+      LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
+    }
+    transformUpdate();
+
+    TicToc t_add;
+
+    hybrid_grid_map_corner_.InsertScan(
+        TransformPointCloud(laserCloudCornerLastStack, pose_map_scan2world_),
+        downsize_filter_corner_);
+
+    hybrid_grid_map_surf_.InsertScan(
+        TransformPointCloud(laserCloudSurfLastStack, pose_map_scan2world_),
+        downsize_filter_surf_);
+
+    LOG_STEP_TIME("MAP", "add points", t_add.toc());
+
+    // publish surround map for every 5 frame
+    if (frame_idx_cur_ % 5 == 0) {
+      PointCloudPtr laserCloudSurround(new PointCloud);
+      *laserCloudSurround += *laserCloudCornerFromMap;
+      *laserCloudSurround += *laserCloudSurfFromMap;
+
+      sensor_msgs::PointCloud2 laserCloudSurround3;
+      pcl::toROSMsg(*laserCloudSurround, laserCloudSurround3);
+      laserCloudSurround3.header.stamp = odom_result.timestamp;
+      laserCloudSurround3.header.frame_id = "/camera_init";
+      pubLaserCloudSurround.publish(laserCloudSurround3);
+    }
+
+    sensor_msgs::PointCloud2 laserCloudFullRes3;
+    pcl::toROSMsg(*TransformPointCloud(laserCloudFullRes, pose_map_scan2world_),
+                  laserCloudFullRes3);
+    laserCloudFullRes3.header.stamp = odom_result.timestamp;
+    laserCloudFullRes3.header.frame_id = "/camera_init";
+    pubLaserCloudFullRes.publish(laserCloudFullRes3);
+
+    LOG_STEP_TIME("MAP", "whole mapping", t_whole.toc());
+
+    nav_msgs::Odometry odomAftMapped;
+    odomAftMapped.header.frame_id = "/camera_init";
+    odomAftMapped.header.stamp = odom_result.timestamp;
+    odomAftMapped.child_frame_id = "/aft_mapped";
+    odomAftMapped.pose = ToRos(pose_map_scan2world_);
+    pubOdomAftMapped.publish(odomAftMapped);
+
+    geometry_msgs::PoseStamped laserAfterMappedPose;
+    laserAfterMappedPose.header = odomAftMapped.header;
+    laserAfterMappedPose.pose = odomAftMapped.pose.pose;
+    laserAfterMappedPath.header.stamp = odomAftMapped.header.stamp;
+    laserAfterMappedPath.header.frame_id = "/camera_init";
+    laserAfterMappedPath.poses.push_back(laserAfterMappedPose);
+    pubLaserAfterMappedPath.publish(laserAfterMappedPath);
+
+    static tf::TransformBroadcaster br;
+    tf::Transform transform;
+    transform.setOrigin({pose_map_scan2world_.translation().x(),
+                         pose_map_scan2world_.translation().y(),
+                         pose_map_scan2world_.translation().z()});
+    transform.setRotation({pose_map_scan2world_.rotation().x(),
+                           pose_map_scan2world_.rotation().y(),
+                           pose_map_scan2world_.rotation().z(),
+                           pose_map_scan2world_.rotation().w()});
+    br.sendTransform(tf::StampedTransform(transform, odomAftMapped.header.stamp,
+                                          "/camera_init", "/aft_mapped"));
+
+    frame_idx_cur_++;
+  }
 }

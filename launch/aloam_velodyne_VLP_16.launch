@@ -15,8 +15,6 @@
 
     <node pkg="aloam_velodyne" type="alaserOdometry" name="alaserOdometry" output="log" args="--log_dir=/tmp" />
 
-    <node pkg="aloam_velodyne" type="alaserMapping" name="alaserMapping" output="log" args="--log_dir=/tmp" />
-
     <arg name="rviz" default="true"/>
     <group if="$(arg rviz)">
         <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz"

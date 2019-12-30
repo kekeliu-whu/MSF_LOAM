@@ -467,7 +467,7 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
   explicit HybridGridImpl(const float resolution)
       : HybridGridBase<PointCloudPtr>(resolution) {}
 
-  PointCloudPtr GetSurroundedCloud(const PointCloudPtr& scan,
+  PointCloudPtr GetSurroundedCloud(const PointCloudConstPtr& scan,
                                    const Rigid3d& pose) {
     Set grid_set;
     for (auto& point : *scan) {
@@ -530,7 +530,7 @@ HybridGrid::HybridGrid(const float& resolution)
 
 HybridGrid::~HybridGrid() { delete hybrid_grid_; }
 
-PointCloudPtr HybridGrid::GetSurroundedCloud(const PointCloudPtr& scan,
+PointCloudPtr HybridGrid::GetSurroundedCloud(const PointCloudConstPtr& scan,
                                              const Rigid3d& pose) {
   return hybrid_grid_->GetSurroundedCloud(scan, pose);
 }

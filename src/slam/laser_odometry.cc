@@ -34,6 +34,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <common/type_conversion.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
@@ -44,9 +45,12 @@
 
 #include "common/rigid_transform.h"
 #include "common/tic_toc.h"
+#include "slam/laser_mapping.h"
 #include "slam/scan_matching/odometry_scan_matcher.h"
 
 namespace {
+
+std::shared_ptr<LaserMapping> laser_mapper;
 
 int g_skip_frame_num = 5;
 bool g_is_system_inited = false;
@@ -102,6 +106,8 @@ int main(int argc, char **argv) {
   google::ParseCommandLineFlags(&argc, &argv, true);
   ros::init(argc, argv, "laserOdometry");
   ros::NodeHandle nh;
+
+  laser_mapper = std::make_shared<LaserMapping>(nh);
 
   nh.param<int>("mapping_skip_frame", g_skip_frame_num, 2);
   LOG(INFO) << "Mapping every " << g_skip_frame_num << " frames";
@@ -171,6 +177,8 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    g_cloud_curr.timestamp = cornerSharpBuf.front()->header.stamp;
+
     pcl::fromROSMsg(*cornerSharpBuf.front(), *g_cloud_curr.cloud_corner_sharp);
     cornerSharpBuf.pop();
 
@@ -208,13 +216,7 @@ int main(int argc, char **argv) {
     laserOdometry.header.frame_id = "/camera_init";
     laserOdometry.child_frame_id = "/laser_odom";
     laserOdometry.header.stamp = ros::Time().fromSec(timeSurfPointsLessFlat);
-    laserOdometry.pose.pose.orientation.x = g_pose_scan2world.rotation().x();
-    laserOdometry.pose.pose.orientation.y = g_pose_scan2world.rotation().y();
-    laserOdometry.pose.pose.orientation.z = g_pose_scan2world.rotation().z();
-    laserOdometry.pose.pose.orientation.w = g_pose_scan2world.rotation().w();
-    laserOdometry.pose.pose.position.x = g_pose_scan2world.translation().x();
-    laserOdometry.pose.pose.position.y = g_pose_scan2world.translation().y();
-    laserOdometry.pose.pose.position.z = g_pose_scan2world.translation().z();
+    laserOdometry.pose = ToRos(g_pose_scan2world);
     laser_odom_publisher.publish(laserOdometry);
 
     geometry_msgs::PoseStamped laserPose;
@@ -250,6 +252,9 @@ int main(int argc, char **argv) {
       laserCloudFullRes3.header.frame_id = "/camera";
       cloud_full_publisher.publish(laserCloudFullRes3);
     }
+
+    g_cloud_curr.odom_pose = g_pose_scan2world;
+    laser_mapper->AddLaserOdometryResult(g_cloud_curr);
     LOG_STEP_TIME("ODO", "publication", t_pub.toc());
     LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
     if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
