@@ -29,7 +29,7 @@ class HybridGrid {
   explicit HybridGrid(const float& resolution);
   ~HybridGrid();
 
-  PointCloudPtr GetSurroundedCloud(const PointCloudPtr& scan,
+  PointCloudPtr GetSurroundedCloud(const PointCloudConstPtr& scan,
                                    const Rigid3d& pose);
 
   void InsertScan(const PointCloudPtr& scan, pcl::Filter<PointType>& filter);

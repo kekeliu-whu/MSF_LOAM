@@ -16,7 +16,8 @@
 struct TimestampedPointCloud {
   ros::Time timestamp;
   std::string frame_id;
-  Rigid3d global_pose;
+  Rigid3d odom_pose;
+  Rigid3d map_pose;
 
   PointCloudPtr cloud_full_res;
   PointCloudPtr cloud_corner_sharp;
@@ -31,5 +32,14 @@ struct TimestampedPointCloud {
         cloud_surf_flat(new PointCloud),
         cloud_surf_less_flat(new PointCloud) {}
 };
+
+inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
+                                         const Rigid3d &pose) {
+  PointCloudPtr cloud_out(new PointCloud);
+  cloud_out->resize(cloud_in->size());
+  for (size_t i = 0; i < cloud_in->size(); ++i)
+    (*cloud_out)[i] = pose * (*cloud_in)[i];
+  return cloud_out;
+}
 
 #endif  // ALOAM_VELODYNE_TIME_STAMPED_POINT_CLOUD_H
