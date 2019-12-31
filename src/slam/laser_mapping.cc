@@ -15,8 +15,8 @@
 
 LaserMapping::LaserMapping(ros::NodeHandle &nh)
     : frame_idx_cur_(0),
-      hybrid_grid_map_corner_(5.0),
-      hybrid_grid_map_surf_(5.0) {
+      hybrid_grid_map_corner_(3.0),
+      hybrid_grid_map_surf_(3.0) {
   // get leaf size
   float line_res = 0;
   float plane_res = 0;
