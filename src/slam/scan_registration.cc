@@ -71,7 +71,7 @@ ros::Publisher g_surf_cloud_publisher;
 ros::Publisher g_surf_less_cloud_publisher;
 ros::Publisher g_removed_cloud_publisher;
 
-boost::shared_ptr<LaserOdometry> laser_odometry;
+std::shared_ptr<LaserOdometry> laser_odometry;
 
 }  // namespace
 
@@ -417,7 +417,7 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "scanRegistration");
   ros::NodeHandle nh;
 
-  laser_odometry = boost::make_shared<LaserOdometry>(nh);
+  laser_odometry = std::make_shared<LaserOdometry>(nh);
 
   // 获取ROS参数
   LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 16))
