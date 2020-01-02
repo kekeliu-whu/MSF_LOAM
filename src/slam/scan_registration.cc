@@ -48,6 +48,7 @@
 
 #include "common/common.h"
 #include "common/tic_toc.h"
+#include "slam/laser_odometry.h"
 
 namespace {
 
@@ -69,6 +70,8 @@ ros::Publisher g_corner_less_cloud_publisher;
 ros::Publisher g_surf_cloud_publisher;
 ros::Publisher g_surf_less_cloud_publisher;
 ros::Publisher g_removed_cloud_publisher;
+
+boost::shared_ptr<LaserOdometry> laser_odometry;
 
 }  // namespace
 
@@ -251,10 +254,10 @@ void HandleLaserCloudMsg(
 
   TicToc t_pts;
 
-  PointCloud cloud_corner_sharp;       // sharp 点
-  PointCloud cloud_corner_less_sharp;  // less sharp 点
-  PointCloud cloud_surf_flat;          // flat 点
-  PointCloud cloud_surf_less_flat;     // less flat 点
+  PointCloudPtr cloud_corner_sharp(new PointCloud);       // sharp 点
+  PointCloudPtr cloud_corner_less_sharp(new PointCloud);  // less sharp 点
+  PointCloudPtr cloud_surf_flat(new PointCloud);          // flat 点
+  PointCloudPtr cloud_surf_less_flat(new PointCloud);     // less flat 点
 
   double t_q_sort = 0;
   // 提取每帧扫描线中的特征点
@@ -286,11 +289,11 @@ void HandleLaserCloudMsg(
           largest_picked_num++;
           if (largest_picked_num <= 2) {
             g_cloud_labels[ind] = P_SHARP;
-            cloud_corner_sharp.push_back(laser_cloud->points[ind]);
-            cloud_corner_less_sharp.push_back(laser_cloud->points[ind]);
+            cloud_corner_sharp->push_back(laser_cloud->points[ind]);
+            cloud_corner_less_sharp->push_back(laser_cloud->points[ind]);
           } else if (largest_picked_num <= 20) {
             g_cloud_labels[ind] = P_LESS_SHARP;
-            cloud_corner_less_sharp.push_back(laser_cloud->points[ind]);
+            cloud_corner_less_sharp->push_back(laser_cloud->points[ind]);
           } else {
             break;
           }
@@ -319,7 +322,7 @@ void HandleLaserCloudMsg(
 
         if (!g_is_cloud_neighbor_picked[ind] && g_cloud_curvatures[ind] < 0.1) {
           g_cloud_labels[ind] = P_FLAT;
-          cloud_surf_flat.push_back(laser_cloud->points[ind]);
+          cloud_surf_flat->push_back(laser_cloud->points[ind]);
 
           smallest_picked_num++;
           if (smallest_picked_num >= 4) {
@@ -357,10 +360,19 @@ void HandleLaserCloudMsg(
     downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
     downSizeFilter.filter(surfPointsLessFlatScanDS);
 
-    cloud_surf_less_flat += surfPointsLessFlatScanDS;
+    *cloud_surf_less_flat += surfPointsLessFlatScanDS;
   }
   LOG_STEP_TIME("REG", "Curvature sort", t_q_sort);
   LOG_STEP_TIME("REG", "Seperate points", t_pts.toc());
+
+  TimestampedPointCloud scan;
+  scan.timestamp = laser_cloud_msg->header.stamp;
+  scan.cloud_full_res = laser_cloud;
+  scan.cloud_surf_less_flat = cloud_surf_less_flat;
+  scan.cloud_surf_flat = cloud_surf_flat;
+  scan.cloud_corner_less_sharp = cloud_corner_less_sharp;
+  scan.cloud_corner_sharp = cloud_corner_sharp;
+  laser_odometry->AddLaserScan(scan);
 
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*laser_cloud, laser_cloud_out_msg);
@@ -369,25 +381,25 @@ void HandleLaserCloudMsg(
   g_cloud_publisher.publish(laser_cloud_out_msg);
 
   sensor_msgs::PointCloud2 cloud_corner_sharp_msg;
-  pcl::toROSMsg(cloud_corner_sharp, cloud_corner_sharp_msg);
+  pcl::toROSMsg(*cloud_corner_sharp, cloud_corner_sharp_msg);
   cloud_corner_sharp_msg.header.stamp = laser_cloud_msg->header.stamp;
   cloud_corner_sharp_msg.header.frame_id = "/aft_mapped";
   g_corner_cloud_publisher.publish(cloud_corner_sharp_msg);
 
   sensor_msgs::PointCloud2 cloud_corner_less_sharp_msg;
-  pcl::toROSMsg(cloud_corner_less_sharp, cloud_corner_less_sharp_msg);
+  pcl::toROSMsg(*cloud_corner_less_sharp, cloud_corner_less_sharp_msg);
   cloud_corner_less_sharp_msg.header.stamp = laser_cloud_msg->header.stamp;
   cloud_corner_less_sharp_msg.header.frame_id = "/aft_mapped";
   g_corner_less_cloud_publisher.publish(cloud_corner_less_sharp_msg);
 
   sensor_msgs::PointCloud2 cloud_surf_flat_msg;
-  pcl::toROSMsg(cloud_surf_flat, cloud_surf_flat_msg);
+  pcl::toROSMsg(*cloud_surf_flat, cloud_surf_flat_msg);
   cloud_surf_flat_msg.header.stamp = laser_cloud_msg->header.stamp;
   cloud_surf_flat_msg.header.frame_id = "/aft_mapped";
   g_surf_cloud_publisher.publish(cloud_surf_flat_msg);
 
   sensor_msgs::PointCloud2 cloud_surf_less_flat_msg;
-  pcl::toROSMsg(cloud_surf_less_flat, cloud_surf_less_flat_msg);
+  pcl::toROSMsg(*cloud_surf_less_flat, cloud_surf_less_flat_msg);
   cloud_surf_less_flat_msg.header.stamp = laser_cloud_msg->header.stamp;
   cloud_surf_less_flat_msg.header.frame_id = "/aft_mapped";
   g_surf_less_cloud_publisher.publish(cloud_surf_less_flat_msg);
@@ -405,9 +417,11 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "scanRegistration");
   ros::NodeHandle nh;
 
+  laser_odometry = boost::make_shared<LaserOdometry>(nh);
+
   // 获取ROS参数
-  CHECK(nh.param<int>("scan_line", g_scan_num, 16))
-      << "Get param 'scan_line' failed!!";
+  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 16))
+      << "Get param 'scan_line' failed, use 16 as the default line number!!";
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.1))
       << "Use default minimum range: 0.1";
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)

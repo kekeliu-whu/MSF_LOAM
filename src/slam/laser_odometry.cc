@@ -1,3 +1,9 @@
+//
+// Created by whu on 1/2/20.
+//
+
+#include "laser_odometry.h"
+
 // This is an advanced implementation of the algorithm described in the
 // following paper:
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
@@ -64,137 +70,34 @@ Rigid3d g_pose_scan2world;
 // Transformation from current scan to previous scan
 Rigid3d g_pose_curr2last;
 
-// 消息队列
-std::queue<sensor_msgs::PointCloud2ConstPtr> cornerSharpBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> cornerLessSharpBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> surfFlatBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> surfLessFlatBuf;
-std::queue<sensor_msgs::PointCloud2ConstPtr> fullPointsBuf;
+ros::Publisher laser_odom_publisher;
 
-void HandleCloudSharpMsg(
-    const sensor_msgs::PointCloud2ConstPtr &cornerPointsSharp) {
-  cornerSharpBuf.push(cornerPointsSharp);
-}
+ros::Publisher laser_path_publisher;
 
-void HandleCloudLessSharpMsg(
-    const sensor_msgs::PointCloud2ConstPtr &cornerPointsLessSharp) {
-  cornerLessSharpBuf.push(cornerPointsLessSharp);
-}
+nav_msgs::Path laserPath;
 
-void HandleCloudFlatMsg(
-    const sensor_msgs::PointCloud2ConstPtr &surfPointsFlat) {
-  surfFlatBuf.push(surfPointsFlat);
-}
-
-void HandleCloudLessFlatMsg(
-    const sensor_msgs::PointCloud2ConstPtr &surfPointsLessFlat) {
-  surfLessFlatBuf.push(surfPointsLessFlat);
-}
-
-// receive all point cloud
-void HandleCloudFullMsg(
-    const sensor_msgs::PointCloud2ConstPtr &laserCloudFullRes) {
-  fullPointsBuf.push(laserCloudFullRes);
-}
+int curr_frame_idx = 0;
 
 }  // namespace
 
-int main(int argc, char **argv) {
-  FLAGS_alsologtostderr = true;
-  FLAGS_colorlogtostderr = true;
-  google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, true);
-  ros::init(argc, argv, "laserOdometry");
-  ros::NodeHandle nh;
-
+LaserOdometry::LaserOdometry(ros::NodeHandle& nh) {
   laser_mapper = std::make_shared<LaserMapping>(nh);
 
   nh.param<int>("mapping_skip_frame", g_skip_frame_num, 2);
   LOG(INFO) << "Mapping every " << g_skip_frame_num << " frames";
 
-  ros::Subscriber subCornerPointsSharp = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/laser_cloud_sharp", 100, HandleCloudSharpMsg);
-  ros::Subscriber subCornerPointsLessSharp =
-      nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 100,
-                                             HandleCloudLessSharpMsg);
-  ros::Subscriber subSurfPointsFlat = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/laser_cloud_flat", 100, HandleCloudFlatMsg);
-  ros::Subscriber subSurfPointsLessFlat =
-      nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 100,
-                                             HandleCloudLessFlatMsg);
-  ros::Subscriber subLaserCloudFullRes = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/velodyne_cloud_2", 100, HandleCloudFullMsg);
-
-  ros::Publisher cloud_corner_last_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_corner_last", 100);
-  ros::Publisher cloud_surf_last_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 100);
-  ros::Publisher cloud_full_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_3", 100);
-  ros::Publisher laser_odom_publisher =
+  laser_odom_publisher =
       nh.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 100);
-  ros::Publisher laser_path_publisher =
-      nh.advertise<nav_msgs::Path>("/laser_odom_path", 100);
+  laser_path_publisher = nh.advertise<nav_msgs::Path>("/laser_odom_path", 100);
+}
 
-  nav_msgs::Path laserPath;
-
-  int curr_frame_idx = 0;
-  ros::Rate rate(100);
-
-  while (ros::ok()) {
-    ros::spinOnce();
-
-    if (cornerSharpBuf.empty() || cornerLessSharpBuf.empty() ||
-        surfFlatBuf.empty() || surfLessFlatBuf.empty() ||
-        fullPointsBuf.empty()) {
-      rate.sleep();
-      continue;
-    }
-
+void LaserOdometry::AddLaserScan(const TimestampedPointCloud& scan) {
+  {
     /**
      * @brief 获取消息
      *
      */
-    double timeCornerPointsSharp = cornerSharpBuf.front()->header.stamp.toSec();
-    double timeCornerPointsLessSharp =
-        cornerLessSharpBuf.front()->header.stamp.toSec();
-    double timeSurfPointsFlat = surfFlatBuf.front()->header.stamp.toSec();
-    double timeSurfPointsLessFlat =
-        surfLessFlatBuf.front()->header.stamp.toSec();
-    double timeLaserCloudFullRes = fullPointsBuf.front()->header.stamp.toSec();
-
-    // 消息必须同步
-    if (timeCornerPointsSharp != timeLaserCloudFullRes ||
-        timeCornerPointsLessSharp != timeLaserCloudFullRes ||
-        timeSurfPointsFlat != timeLaserCloudFullRes ||
-        timeSurfPointsLessFlat != timeLaserCloudFullRes) {
-      LOG(WARNING) << "[ODO] unsync message: "
-                   << "sharp=" << timeCornerPointsSharp
-                   << ", less sharp=" << timeCornerPointsLessSharp
-                   << ", flat=" << timeSurfPointsFlat
-                   << ", less flat=" << timeSurfPointsLessFlat
-                   << ", full=" << timeLaserCloudFullRes;
-      continue;
-    }
-
-    g_cloud_curr.timestamp = cornerSharpBuf.front()->header.stamp;
-
-    pcl::fromROSMsg(*cornerSharpBuf.front(), *g_cloud_curr.cloud_corner_sharp);
-    cornerSharpBuf.pop();
-
-    pcl::fromROSMsg(*cornerLessSharpBuf.front(),
-                    *g_cloud_curr.cloud_corner_less_sharp);
-    cornerLessSharpBuf.pop();
-
-    pcl::fromROSMsg(*surfFlatBuf.front(), *g_cloud_curr.cloud_surf_flat);
-    surfFlatBuf.pop();
-
-    pcl::fromROSMsg(*surfLessFlatBuf.front(),
-                    *g_cloud_curr.cloud_surf_less_flat);
-    surfLessFlatBuf.pop();
-
-    pcl::fromROSMsg(*fullPointsBuf.front(), *g_cloud_curr.cloud_full_res);
-    fullPointsBuf.pop();
+    g_cloud_curr = scan;
 
     TicToc t_whole;
     // initializing
@@ -215,7 +118,7 @@ int main(int argc, char **argv) {
     nav_msgs::Odometry laserOdometry;
     laserOdometry.header.frame_id = "/camera_init";
     laserOdometry.child_frame_id = "/laser_odom";
-    laserOdometry.header.stamp = ros::Time().fromSec(timeSurfPointsLessFlat);
+    laserOdometry.header.stamp = g_cloud_curr.timestamp;
     laserOdometry.pose = ToRos(g_pose_scan2world);
     laser_odom_publisher.publish(laserOdometry);
 
@@ -226,30 +129,6 @@ int main(int argc, char **argv) {
     laserPath.poses.push_back(laserPose);
     laserPath.header.frame_id = "/camera_init";
     laser_path_publisher.publish(laserPath);
-
-    if (curr_frame_idx % g_skip_frame_num == 0) {
-      sensor_msgs::PointCloud2 laserCloudCornerLast2;
-      pcl::toROSMsg(*g_cloud_curr.cloud_corner_less_sharp,
-                    laserCloudCornerLast2);
-      laserCloudCornerLast2.header.stamp =
-          ros::Time().fromSec(timeSurfPointsLessFlat);
-      laserCloudCornerLast2.header.frame_id = "/camera";
-      cloud_corner_last_publisher.publish(laserCloudCornerLast2);
-
-      sensor_msgs::PointCloud2 laserCloudSurfLast2;
-      pcl::toROSMsg(*g_cloud_curr.cloud_surf_less_flat, laserCloudSurfLast2);
-      laserCloudSurfLast2.header.stamp =
-          ros::Time().fromSec(timeSurfPointsLessFlat);
-      laserCloudSurfLast2.header.frame_id = "/camera";
-      cloud_surf_last_publisher.publish(laserCloudSurfLast2);
-
-      sensor_msgs::PointCloud2 laserCloudFullRes3;
-      pcl::toROSMsg(*g_cloud_curr.cloud_full_res, laserCloudFullRes3);
-      laserCloudFullRes3.header.stamp =
-          ros::Time().fromSec(timeSurfPointsLessFlat);
-      laserCloudFullRes3.header.frame_id = "/camera";
-      cloud_full_publisher.publish(laserCloudFullRes3);
-    }
 
     g_cloud_curr.odom_pose = g_pose_scan2world;
     laser_mapper->AddLaserOdometryResult(g_cloud_curr);
@@ -262,5 +141,4 @@ int main(int argc, char **argv) {
 
     curr_frame_idx++;
   }
-  return 0;
 }

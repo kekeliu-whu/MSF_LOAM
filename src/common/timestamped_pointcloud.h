@@ -6,9 +6,8 @@
 #define LOAM_VELODYNE_TIMESTAMPED_POINTCLOUD_H
 
 #include <pcl/point_cloud.h>
+#include <ros/time.h>
 #include <Eigen/Eigen>
-
-#include <sensor_msgs/PointCloud2.h>
 
 #include "common/common.h"
 #include "common/rigid_transform.h"
