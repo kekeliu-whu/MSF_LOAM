@@ -1,9 +1,3 @@
-//
-// Created by whu on 1/2/20.
-//
-
-#include "laser_odometry.h"
-
 // This is an advanced implementation of the algorithm described in the
 // following paper:
 //   J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time.
@@ -11,6 +5,8 @@
 
 // Modifier: Tong Qin               qintonguav@gmail.com
 // 	         Shaozu Cao 		    saozu.cao@connect.ust.hk
+//           Keke Liu
+//           kekliu.priv@gmail.com
 
 // Copyright 2013, Ji Zhang, Carnegie Mellon University
 // Further contributions copyright (c) 2016, Southwest Research Institute
@@ -52,93 +48,64 @@
 #include "common/rigid_transform.h"
 #include "common/tic_toc.h"
 #include "slam/laser_mapping.h"
+#include "slam/laser_odometry.h"
 #include "slam/scan_matching/odometry_scan_matcher.h"
 
-namespace {
-
-std::shared_ptr<LaserMapping> laser_mapper;
-
-int g_skip_frame_num = 5;
-bool g_is_system_inited = false;
-
-TimestampedPointCloud g_cloud_last;
-TimestampedPointCloud g_cloud_curr;
-
-// Transformation from scan to map
-Rigid3d g_pose_scan2world;
-
-// Transformation from current scan to previous scan
-Rigid3d g_pose_curr2last;
-
-ros::Publisher laser_odom_publisher;
-
-ros::Publisher laser_path_publisher;
-
-nav_msgs::Path laserPath;
-
-int curr_frame_idx = 0;
-
-}  // namespace
-
-LaserOdometry::LaserOdometry(ros::NodeHandle& nh) {
-  laser_mapper = std::make_shared<LaserMapping>(nh);
-
-  nh.param<int>("mapping_skip_frame", g_skip_frame_num, 2);
-  LOG(INFO) << "Mapping every " << g_skip_frame_num << " frames";
-
-  laser_odom_publisher =
+LaserOdometry::LaserOdometry(ros::NodeHandle& nh)
+    : laser_mapper_(std::make_shared<LaserMapping>(nh)),
+      is_system_inited_(false),
+      curr_frame_idx_(0) {
+  laser_odom_publisher_ =
       nh.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 100);
-  laser_path_publisher = nh.advertise<nav_msgs::Path>("/laser_odom_path", 100);
+  laser_path_publisher_ = nh.advertise<nav_msgs::Path>("/laser_odom_path", 100);
 }
 
 void LaserOdometry::AddLaserScan(const TimestampedPointCloud& scan) {
-  {
-    /**
-     * @brief 获取消息
-     *
-     */
-    g_cloud_curr = scan;
+  /**
+   * @brief 获取消息
+   *
+   */
+  scan_curr_ = scan;
 
-    TicToc t_whole;
-    // initializing
-    if (!g_is_system_inited) {
-      g_is_system_inited = true;
-      LOG(INFO) << "[ODO] Initializing ...";
-    } else {
-      OdometryScanMatcher::Match(g_cloud_last, g_cloud_curr, &g_pose_curr2last);
+  TicToc t_whole;
+  // initializing
+  if (!is_system_inited_) {
+    is_system_inited_ = true;
+    LOG(INFO) << "[ODO] Initializing ...";
+  } else {
+    OdometryScanMatcher::Match(scan_last_, scan_curr_, &pose_curr2last_);
 
-      LOG(INFO) << "[ODO] odometry_delta: " << g_pose_curr2last;
-      LOG(INFO) << "[ODO] odometry_curr: " << g_pose_scan2world;
-      g_pose_scan2world = g_pose_scan2world * g_pose_curr2last;
-    }
-
-    TicToc t_pub;
-
-    // publish odometry
-    nav_msgs::Odometry laserOdometry;
-    laserOdometry.header.frame_id = "/camera_init";
-    laserOdometry.child_frame_id = "/laser_odom";
-    laserOdometry.header.stamp = g_cloud_curr.timestamp;
-    laserOdometry.pose = ToRos(g_pose_scan2world);
-    laser_odom_publisher.publish(laserOdometry);
-
-    geometry_msgs::PoseStamped laserPose;
-    laserPose.header = laserOdometry.header;
-    laserPose.pose = laserOdometry.pose.pose;
-    laserPath.header.stamp = laserOdometry.header.stamp;
-    laserPath.poses.push_back(laserPose);
-    laserPath.header.frame_id = "/camera_init";
-    laser_path_publisher.publish(laserPath);
-
-    g_cloud_curr.odom_pose = g_pose_scan2world;
-    laser_mapper->AddLaserOdometryResult(g_cloud_curr);
-
-    std::swap(g_cloud_last, g_cloud_curr);
-
-    LOG_STEP_TIME("ODO", "publication", t_pub.toc());
-    LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
-    if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
-
-    curr_frame_idx++;
+    LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
+    LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
+    pose_scan2world_ = pose_scan2world_ * pose_curr2last_;
   }
+
+  TicToc t_pub;
+
+  // publish odometry
+  nav_msgs::Odometry laserOdometry;
+  laserOdometry.header.frame_id = "/camera_init";
+  laserOdometry.child_frame_id = "/laser_odom";
+  laserOdometry.header.stamp = scan_curr_.timestamp;
+  laserOdometry.pose = ToRos(pose_scan2world_);
+  laser_odom_publisher_.publish(laserOdometry);
+
+  geometry_msgs::PoseStamped laserPose;
+  laserPose.header = laserOdometry.header;
+  laserPose.pose = laserOdometry.pose.pose;
+  laser_path_.header.stamp = laserOdometry.header.stamp;
+  laser_path_.poses.push_back(laserPose);
+  laser_path_.header.frame_id = "/camera_init";
+  laser_path_publisher_.publish(laser_path_);
+
+  scan_curr_.odom_pose = pose_scan2world_;
+  laser_mapper_->AddLaserOdometryResult(scan_curr_);
+
+  std::swap(scan_last_, scan_curr_);
+
+  LOG_STEP_TIME("ODO", "publication", t_pub.toc());
+  LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
+  if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
+
+  curr_frame_idx_++;
 }
