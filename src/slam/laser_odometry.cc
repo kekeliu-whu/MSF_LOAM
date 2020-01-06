@@ -51,14 +51,17 @@
 #include "slam/laser_odometry.h"
 #include "slam/scan_matching/odometry_scan_matcher.h"
 
-LaserOdometry::LaserOdometry(ros::NodeHandle& nh)
-    : laser_mapper_(std::make_shared<LaserMapping>(nh)),
+LaserOdometry::LaserOdometry(bool is_offline_mode, ros::NodeHandle& nh)
+    : laser_mapper_(std::make_shared<LaserMapping>(is_offline_mode, nh)),
       is_system_inited_(false),
       curr_frame_idx_(0) {
+  LOG(INFO) << "LaserOdometry initializing ...";
   laser_odom_publisher_ =
       nh.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 100);
   laser_path_publisher_ = nh.advertise<nav_msgs::Path>("/laser_odom_path", 100);
 }
+
+LaserOdometry::~LaserOdometry() { LOG(INFO) << "LaserOdometry finished."; }
 
 void LaserOdometry::AddLaserScan(const TimestampedPointCloud& scan) {
   /**

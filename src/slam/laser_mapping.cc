@@ -13,15 +13,19 @@
 #include "laser_mapping.h"
 #include "slam/scan_matching/mapping_scan_matcher.h"
 
-LaserMapping::LaserMapping(ros::NodeHandle &nh)
+LaserMapping::LaserMapping(bool is_offline_mode, ros::NodeHandle &nh)
     : frame_idx_cur_(0),
       hybrid_grid_map_corner_(3.0),
-      hybrid_grid_map_surf_(3.0) {
+      hybrid_grid_map_surf_(3.0),
+      is_offline_mode_(is_offline_mode) {
+  LOG(INFO) << "LaserMapping initializing ...";
   // get leaf size
   float line_res = 0;
   float plane_res = 0;
-  nh.param<float>("mapping_line_resolution", line_res, 0.4);
-  nh.param<float>("mapping_plane_resolution", plane_res, 0.8);
+  LOG_IF(WARNING, !nh.param<float>("mapping_line_resolution", line_res, 0.2))
+      << "Use default mapping_line_resolution: 0.2";
+  LOG_IF(WARNING, !nh.param<float>("mapping_plane_resolution", plane_res, 0.4))
+      << "Use default mapping_plane_resolution: 0.4";
   LOG(INFO) << "[MAP]"
             << " line resolution " << line_res << " plane resolution "
             << plane_res;
@@ -49,6 +53,7 @@ LaserMapping::LaserMapping(ros::NodeHandle &nh)
 LaserMapping::~LaserMapping() {
   // todo
   thread_.join();
+  LOG(INFO) << "LaserMapping finished.";
 }
 
 void LaserMapping::AddLaserOdometryResult(
@@ -79,11 +84,12 @@ void LaserMapping::Run() {
       if (!is_msg_recv) continue;
       odom_result = odometry_result_queue_.front();
       odometry_result_queue_.pop();
-      // Comment the following snippet to enable full pose estimation
-      while (!odometry_result_queue_.empty()) {
-        LOG(WARNING)
-            << "[MAP] drop lidar frame in mapping for real time performance";
-        odometry_result_queue_.pop();
+      if (!is_offline_mode_) {
+        while (!odometry_result_queue_.empty()) {
+          LOG(WARNING)
+              << "[MAP] drop lidar frame in mapping for real time performance";
+          odometry_result_queue_.pop();
+        }
       }
     }
 
@@ -182,7 +188,6 @@ void LaserMapping::Run() {
     laserAfterMappedPath.poses.push_back(laserAfterMappedPose);
     pubLaserAfterMappedPath.publish(laserAfterMappedPath);
 
-    static tf::TransformBroadcaster br;
     tf::Transform transform;
     transform.setOrigin({pose_map_scan2world_.translation().x(),
                          pose_map_scan2world_.translation().y(),
@@ -191,8 +196,8 @@ void LaserMapping::Run() {
                            pose_map_scan2world_.rotation().y(),
                            pose_map_scan2world_.rotation().z(),
                            pose_map_scan2world_.rotation().w()});
-    br.sendTransform(tf::StampedTransform(transform, odomAftMapped.header.stamp,
-                                          "/camera_init", "/aft_mapped"));
+    transform_broadcaster_.sendTransform(tf::StampedTransform(
+        transform, odomAftMapped.header.stamp, "/camera_init", "/aft_mapped"));
 
     frame_idx_cur_++;
   }
