@@ -70,13 +70,6 @@ std::vector<int> g_cloud_sorted_indices(400000);  // 通过曲率对点排序
 std::vector<bool> g_is_cloud_neighbor_picked(400000);  // 临近点是否已被选取
 std::vector<int> g_cloud_labels(400000);  // 扫描线上点的类型
 
-ros::Publisher g_cloud_publisher;
-ros::Publisher g_corner_cloud_publisher;
-ros::Publisher g_corner_less_cloud_publisher;
-ros::Publisher g_surf_cloud_publisher;
-ros::Publisher g_surf_less_cloud_publisher;
-ros::Publisher g_removed_cloud_publisher;
-
 std::shared_ptr<LaserOdometry> laser_odometry;
 
 }  // namespace
@@ -380,36 +373,6 @@ void HandleLaserCloudMsg(
   scan.cloud_corner_sharp = cloud_corner_sharp;
   laser_odometry->AddLaserScan(scan);
 
-  sensor_msgs::PointCloud2 laser_cloud_out_msg;
-  pcl::toROSMsg(*laser_cloud, laser_cloud_out_msg);
-  laser_cloud_out_msg.header.stamp = laser_cloud_msg->header.stamp;
-  laser_cloud_out_msg.header.frame_id = "/aft_mapped";
-  g_cloud_publisher.publish(laser_cloud_out_msg);
-
-  sensor_msgs::PointCloud2 cloud_corner_sharp_msg;
-  pcl::toROSMsg(*cloud_corner_sharp, cloud_corner_sharp_msg);
-  cloud_corner_sharp_msg.header.stamp = laser_cloud_msg->header.stamp;
-  cloud_corner_sharp_msg.header.frame_id = "/aft_mapped";
-  g_corner_cloud_publisher.publish(cloud_corner_sharp_msg);
-
-  sensor_msgs::PointCloud2 cloud_corner_less_sharp_msg;
-  pcl::toROSMsg(*cloud_corner_less_sharp, cloud_corner_less_sharp_msg);
-  cloud_corner_less_sharp_msg.header.stamp = laser_cloud_msg->header.stamp;
-  cloud_corner_less_sharp_msg.header.frame_id = "/aft_mapped";
-  g_corner_less_cloud_publisher.publish(cloud_corner_less_sharp_msg);
-
-  sensor_msgs::PointCloud2 cloud_surf_flat_msg;
-  pcl::toROSMsg(*cloud_surf_flat, cloud_surf_flat_msg);
-  cloud_surf_flat_msg.header.stamp = laser_cloud_msg->header.stamp;
-  cloud_surf_flat_msg.header.frame_id = "/aft_mapped";
-  g_surf_cloud_publisher.publish(cloud_surf_flat_msg);
-
-  sensor_msgs::PointCloud2 cloud_surf_less_flat_msg;
-  pcl::toROSMsg(*cloud_surf_less_flat, cloud_surf_less_flat_msg);
-  cloud_surf_less_flat_msg.header.stamp = laser_cloud_msg->header.stamp;
-  cloud_surf_less_flat_msg.header.frame_id = "/aft_mapped";
-  g_surf_less_cloud_publisher.publish(cloud_surf_less_flat_msg);
-
   LOG_STEP_TIME("REG", "Scan registration", t_whole.toc());
   LOG_IF(WARNING, t_whole.toc() > 100)
       << "Scan registration process over 100ms";
@@ -430,20 +393,6 @@ int main(int argc, char **argv) {
       << "Use default minimum_range: 0.3";
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
       << "only support velodyne with 16, 32 or 64 scan line!";
-
-  // 注册订阅器和发布器
-  g_cloud_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 100);
-  g_corner_cloud_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 100);
-  g_corner_less_cloud_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 100);
-  g_surf_cloud_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_flat", 100);
-  g_surf_less_cloud_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 100);
-  g_removed_cloud_publisher =
-      nh.advertise<sensor_msgs::PointCloud2>("/laser_remove_points", 100);
 
   laser_odometry = std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, nh);
 
