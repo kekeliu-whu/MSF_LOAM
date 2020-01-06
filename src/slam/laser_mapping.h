@@ -13,7 +13,7 @@
 #include <thread>
 
 #include "common/timestamped_pointcloud.h"
-#include "hybrid_grid.h"
+#include "slam/hybrid_grid.h"
 
 using LaserOdometryResultType = TimestampedPointCloud;
 
@@ -28,6 +28,8 @@ class LaserMapping {
 
  private:
   void Run();
+
+  void PublishScan(const TimestampedPointCloud &scan);
 
   // set initial guess for pose
   inline void transformAssociateToMap() {
@@ -67,6 +69,12 @@ class LaserMapping {
   bool is_offline_mode_;
 
   tf::TransformBroadcaster transform_broadcaster_;
+
+  ros::Publisher cloud_scan_publisher_;
+  ros::Publisher cloud_corner_publisher_;
+  ros::Publisher cloud_corner_less_publisher_;
+  ros::Publisher cloud_surf_publisher_;
+  ros::Publisher cloud_surf_less_publisher_;
 };
 
 #endif  // ALOAM_VELODYNE_LASER_MAPPING_H
