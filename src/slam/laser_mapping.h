@@ -7,6 +7,7 @@
 
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
+#include <tf/transform_broadcaster.h>
 #include <condition_variable>
 #include <queue>
 #include <thread>
@@ -18,7 +19,7 @@ using LaserOdometryResultType = TimestampedPointCloud;
 
 class LaserMapping {
  public:
-  LaserMapping(ros::NodeHandle &nh);
+  LaserMapping(bool is_offline_mode, ros::NodeHandle &nh);
 
   ~LaserMapping();
 
@@ -62,6 +63,10 @@ class LaserMapping {
       pubOdomAftMappedHighFrec, pubLaserAfterMappedPath;
 
   nav_msgs::Path laserAfterMappedPath;
+
+  bool is_offline_mode_;
+
+  tf::TransformBroadcaster transform_broadcaster_;
 };
 
 #endif  // ALOAM_VELODYNE_LASER_MAPPING_H

@@ -2,9 +2,6 @@
 
     <param name="scan_line" type="int" value="16"/>
 
-    <!-- if 1, do mapping 10 Hz, if 2, do mapping 5 Hz. Suggest to use 1, it will adjust frequence automaticlly -->
-    <param name="mapping_skip_frame" type="int" value="1"/>
-
     <!-- remove too closed points -->
     <param name="minimum_range" type="double" value="0.3"/>
 

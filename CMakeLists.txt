@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(aloam_velodyne)
 
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_FLAGS "-O3 -Wall -g")
+set(CMAKE_CXX_FLAGS "-Ofast -Wall -g")
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs

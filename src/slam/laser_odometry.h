@@ -12,7 +12,9 @@
 
 class LaserOdometry {
  public:
-  explicit LaserOdometry(ros::NodeHandle &nh);
+  LaserOdometry(bool is_offline_mode, ros::NodeHandle &nh);
+
+  ~LaserOdometry();
 
   void AddLaserScan(const TimestampedPointCloud &scan);
 

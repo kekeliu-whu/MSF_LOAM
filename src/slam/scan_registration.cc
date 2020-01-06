@@ -40,6 +40,8 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
+#include <rosbag/bag.h>
+#include <rosbag/view.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <Eigen/Eigen>
 #include <cmath>
@@ -49,6 +51,10 @@
 #include "common/common.h"
 #include "common/tic_toc.h"
 #include "slam/laser_odometry.h"
+
+DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
+
+DEFINE_string(bag_filename, "", "Bag file to read in offline mode.");
 
 namespace {
 
@@ -414,22 +420,18 @@ int main(int argc, char **argv) {
   FLAGS_colorlogtostderr = true;
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
-  ros::init(argc, argv, "scanRegistration");
+  ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
-
-  laser_odometry = std::make_shared<LaserOdometry>(nh);
 
   // 获取ROS参数
   LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 16))
-      << "Get param 'scan_line' failed, use 16 as the default line number!!";
-  LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.1))
-      << "Use default minimum range: 0.1";
+      << "Use default scan_line: 16";
+  LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
+      << "Use default minimum_range: 0.3";
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
       << "only support velodyne with 16, 32 or 64 scan line!";
 
   // 注册订阅器和发布器
-  ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
-      "/velodyne_points", 10, HandleLaserCloudMsg);
   g_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 100);
   g_corner_cloud_publisher =
@@ -443,7 +445,30 @@ int main(int argc, char **argv) {
   g_removed_cloud_publisher =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_remove_points", 100);
 
-  ros::spin();
+  laser_odometry = std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, nh);
+
+  if (FLAGS_is_offline_mode) {
+    CHECK(!FLAGS_bag_filename.empty());
+    LOG(INFO) << "Using offline mode ...";
+    rosbag::Bag bag;
+    bag.open(FLAGS_bag_filename);
+    LOG(INFO) << "Reading bag file " << FLAGS_bag_filename << " ...";
+    for (rosbag::MessageInstance const m : rosbag::View(bag)) {
+      auto msg = m.instantiate<sensor_msgs::PointCloud2>();
+      if (msg) {
+        HandleLaserCloudMsg(msg);
+      }
+    }
+    bag.close();
+    // Wait for laser mapping thread die
+    laser_odometry.reset();
+  } else {
+    LOG_IF(WARNING, !FLAGS_bag_filename.empty())
+        << "Offline mode is on, so bag_filename will be ignored.";
+    ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
+        "/velodyne_points", 10, HandleLaserCloudMsg);
+    ros::spin();
+  }
 
   return 0;
 }
