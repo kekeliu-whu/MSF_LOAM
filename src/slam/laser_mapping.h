@@ -19,7 +19,7 @@ using LaserOdometryResultType = TimestampedPointCloud;
 
 class LaserMapping {
  public:
-  LaserMapping(bool is_offline_mode, ros::NodeHandle &nh);
+  explicit LaserMapping(bool is_offline_mode);
 
   ~LaserMapping();
 
@@ -41,15 +41,19 @@ class LaserMapping {
   }
 
  private:
+  int frame_idx_cur_;
+
   std::thread thread_;
   std::mutex mutex_;
   std::condition_variable cv_;
 
   std::queue<LaserOdometryResultType> odometry_result_queue_;
-  int frame_idx_cur_;
 
   HybridGrid hybrid_grid_map_corner_;
   HybridGrid hybrid_grid_map_surf_;
+
+  pcl::VoxelGrid<PointType> downsize_filter_corner_;
+  pcl::VoxelGrid<PointType> downsize_filter_surf_;
 
   // Transformation from scan to odom's world frame
   Rigid3d pose_odom_scan2world_;
@@ -58,23 +62,25 @@ class LaserMapping {
   // Transformation between odom's world and map's world frame
   Rigid3d pose_odom2map_;
 
-  pcl::VoxelGrid<PointType> downsize_filter_corner_;
-  pcl::VoxelGrid<PointType> downsize_filter_surf_;
-
-  ros::Publisher pubLaserCloudSurround, pubLaserCloudFullRes, pubOdomAftMapped,
-      pubOdomAftMappedHighFrec, pubLaserAfterMappedPath;
-
-  nav_msgs::Path laserAfterMappedPath;
-
-  bool is_offline_mode_;
-
-  tf::TransformBroadcaster transform_broadcaster_;
+  /**
+   * @brief ROS
+   *
+   */
 
   ros::Publisher cloud_scan_publisher_;
   ros::Publisher cloud_corner_publisher_;
   ros::Publisher cloud_corner_less_publisher_;
   ros::Publisher cloud_surf_publisher_;
   ros::Publisher cloud_surf_less_publisher_;
+
+  ros::Publisher cloud_surround_publisher_;
+  ros::Publisher aftmapped_odom_publisher_;
+  ros::Publisher aftmapped_odom_highfrec_publisher_;
+  ros::Publisher aftmapped_path_publisher_;
+
+  nav_msgs::Path aftmapped_path_;
+
+  tf::TransformBroadcaster transform_broadcaster_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H

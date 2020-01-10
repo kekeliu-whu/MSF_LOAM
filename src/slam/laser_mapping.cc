@@ -13,11 +13,21 @@
 #include "laser_mapping.h"
 #include "slam/scan_matching/mapping_scan_matcher.h"
 
-LaserMapping::LaserMapping(bool is_offline_mode, ros::NodeHandle &nh)
+namespace {
+
+bool g_is_offline_mode;
+
+}  // namespace
+
+LaserMapping::LaserMapping(bool is_offline_mode)
     : frame_idx_cur_(0),
       hybrid_grid_map_corner_(3.0),
-      hybrid_grid_map_surf_(3.0),
-      is_offline_mode_(is_offline_mode) {
+      hybrid_grid_map_surf_(3.0) {
+  g_is_offline_mode = is_offline_mode;
+  // NodeHandle uses reference counting internally,
+  // thus a local variable can be created here
+  ros::NodeHandle nh;
+
   LOG(INFO) << "LaserMapping initializing ...";
   // get leaf size
   float line_res = 0;
@@ -43,15 +53,13 @@ LaserMapping::LaserMapping(bool is_offline_mode, ros::NodeHandle &nh)
   cloud_surf_less_publisher_ =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 100);
 
-  pubLaserCloudSurround =
+  cloud_surround_publisher_ =
       nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 100);
-  pubLaserCloudFullRes =
-      nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_registered", 100);
-  pubOdomAftMapped =
+  aftmapped_odom_publisher_ =
       nh.advertise<nav_msgs::Odometry>("/aft_mapped_to_init", 100);
-  pubOdomAftMappedHighFrec =
+  aftmapped_odom_highfrec_publisher_ =
       nh.advertise<nav_msgs::Odometry>("/aft_mapped_to_init_high_frec", 100);
-  pubLaserAfterMappedPath =
+  aftmapped_path_publisher_ =
       nh.advertise<nav_msgs::Path>("/aft_mapped_path", 100);
 
   // RUN
@@ -70,12 +78,12 @@ void LaserMapping::AddLaserOdometryResult(
   cv_.notify_one();
   // publish odom tf
   // high frequence publish
-  nav_msgs::Odometry odomAftMapped;
-  odomAftMapped.child_frame_id = "/aft_mapped";
-  odomAftMapped.header.frame_id = "/camera_init";
-  odomAftMapped.header.stamp = laser_odometry_result.timestamp;
-  odomAftMapped.pose = ToRos(pose_odom2map_ * laser_odometry_result.odom_pose);
-  pubOdomAftMappedHighFrec.publish(odomAftMapped);
+  nav_msgs::Odometry aftmapped_odom;
+  aftmapped_odom.child_frame_id = "/aft_mapped";
+  aftmapped_odom.header.frame_id = "/camera_init";
+  aftmapped_odom.header.stamp = laser_odometry_result.timestamp;
+  aftmapped_odom.pose = ToRos(pose_odom2map_ * laser_odometry_result.odom_pose);
+  aftmapped_odom_highfrec_publisher_.publish(aftmapped_odom);
 }
 
 void LaserMapping::Run() {
@@ -90,7 +98,7 @@ void LaserMapping::Run() {
       if (!is_msg_recv) continue;
       odom_result = odometry_result_queue_.front();
       odometry_result_queue_.pop();
-      if (!is_offline_mode_) {
+      if (!g_is_offline_mode) {
         while (!odometry_result_queue_.empty()) {
           LOG(WARNING)
               << "[MAP] drop lidar frame in mapping for real time performance";
@@ -156,6 +164,7 @@ void LaserMapping::Run() {
         downsize_filter_surf_);
 
     LOG_STEP_TIME("MAP", "add points", t_add.toc());
+    LOG_STEP_TIME("MAP", "whole mapping", t_whole.toc());
 
     // publish surround map for every 5 frame
     if (frame_idx_cur_ % 5 == 0) {
@@ -167,32 +176,23 @@ void LaserMapping::Run() {
       pcl::toROSMsg(*laserCloudSurround, laserCloudSurround3);
       laserCloudSurround3.header.stamp = odom_result.timestamp;
       laserCloudSurround3.header.frame_id = "/camera_init";
-      pubLaserCloudSurround.publish(laserCloudSurround3);
+      cloud_surround_publisher_.publish(laserCloudSurround3);
     }
 
-    sensor_msgs::PointCloud2 laserCloudFullRes3;
-    pcl::toROSMsg(*TransformPointCloud(laserCloudFullRes, pose_map_scan2world_),
-                  laserCloudFullRes3);
-    laserCloudFullRes3.header.stamp = odom_result.timestamp;
-    laserCloudFullRes3.header.frame_id = "/camera_init";
-    pubLaserCloudFullRes.publish(laserCloudFullRes3);
-
-    LOG_STEP_TIME("MAP", "whole mapping", t_whole.toc());
-
-    nav_msgs::Odometry odomAftMapped;
-    odomAftMapped.header.frame_id = "/camera_init";
-    odomAftMapped.header.stamp = odom_result.timestamp;
-    odomAftMapped.child_frame_id = "/aft_mapped";
-    odomAftMapped.pose = ToRos(pose_map_scan2world_);
-    pubOdomAftMapped.publish(odomAftMapped);
+    nav_msgs::Odometry aftmapped_odom;
+    aftmapped_odom.header.frame_id = "/camera_init";
+    aftmapped_odom.header.stamp = odom_result.timestamp;
+    aftmapped_odom.child_frame_id = "/aft_mapped";
+    aftmapped_odom.pose = ToRos(pose_map_scan2world_);
+    aftmapped_odom_publisher_.publish(aftmapped_odom);
 
     geometry_msgs::PoseStamped laserAfterMappedPose;
-    laserAfterMappedPose.header = odomAftMapped.header;
-    laserAfterMappedPose.pose = odomAftMapped.pose.pose;
-    laserAfterMappedPath.header.stamp = odomAftMapped.header.stamp;
-    laserAfterMappedPath.header.frame_id = "/camera_init";
-    laserAfterMappedPath.poses.push_back(laserAfterMappedPose);
-    pubLaserAfterMappedPath.publish(laserAfterMappedPath);
+    laserAfterMappedPose.header = aftmapped_odom.header;
+    laserAfterMappedPose.pose = aftmapped_odom.pose.pose;
+    aftmapped_path_.header.stamp = aftmapped_odom.header.stamp;
+    aftmapped_path_.header.frame_id = "/camera_init";
+    aftmapped_path_.poses.push_back(laserAfterMappedPose);
+    aftmapped_path_publisher_.publish(aftmapped_path_);
 
     PublishScan(odom_result);
 
@@ -205,7 +205,7 @@ void LaserMapping::Run() {
                            pose_map_scan2world_.rotation().z(),
                            pose_map_scan2world_.rotation().w()});
     transform_broadcaster_.sendTransform(tf::StampedTransform(
-        transform, odomAftMapped.header.stamp, "/camera_init", "/aft_mapped"));
+        transform, aftmapped_odom.header.stamp, "/camera_init", "/aft_mapped"));
 
     frame_idx_cur_++;
   }

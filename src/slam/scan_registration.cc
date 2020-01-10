@@ -61,9 +61,8 @@ namespace {
 enum PointLabel { P_UNKNOWN = 0, P_LESS_SHARP = 1, P_SHARP = 2, P_FLAT = -1 };
 
 const double kScanPeriod = 0.1;  // 扫描周期
-int g_cloud_index_curr = 0;      // 当前扫描帧下标
 double g_min_range;              // 最小扫描距离
-int g_scan_num;                  // 扫描个数
+int g_scan_num;                  // 扫描线数
 
 std::vector<float> g_cloud_curvatures(400000);    // 点的曲率
 std::vector<int> g_cloud_sorted_indices(400000);  // 通过曲率对点排序
@@ -103,9 +102,7 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
 
 void HandleLaserCloudMsg(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
-    const std::shared_ptr<LaserOdometry> &laser_odometry) {
-  g_cloud_index_curr++;
-
+    const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   TicToc t_whole;
   TicToc t_prepare;
   std::vector<int> scan_start_indices(g_scan_num, 0);
@@ -173,7 +170,6 @@ void HandleLaserCloudMsg(
       LOG(FATAL) << "Wrong scan number:" << g_scan_num;
     }
 
-    // TODO
     double ori = -atan2(point.y, point.x);
     if (!halfPassed) {
       if (ori < startOri - M_PI / 2) {
@@ -370,7 +366,7 @@ void HandleLaserCloudMsg(
   scan.cloud_surf_flat = cloud_surf_flat;
   scan.cloud_corner_less_sharp = cloud_corner_less_sharp;
   scan.cloud_corner_sharp = cloud_corner_sharp;
-  laser_odometry->AddLaserScan(scan);
+  laser_odometry_handler->AddLaserScan(scan);
 
   LOG_STEP_TIME("REG", "Scan registration", t_whole.toc());
   LOG_IF(WARNING, t_whole.toc() > 100)
@@ -395,8 +391,8 @@ int main(int argc, char **argv) {
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
       << "only support velodyne with 16, 32 or 64 scan line!";
 
-  auto laser_odometry =
-      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, nh);
+  auto laser_odometry_handler =
+      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode);
 
   if (FLAGS_is_offline_mode) {
     CHECK(!FLAGS_bag_filename.empty());
@@ -407,7 +403,7 @@ int main(int argc, char **argv) {
     for (rosbag::MessageInstance const m : rosbag::View(bag)) {
       auto msg = m.instantiate<sensor_msgs::PointCloud2>();
       if (msg) {
-        HandleLaserCloudMsg(msg, laser_odometry);
+        HandleLaserCloudMsg(msg, laser_odometry_handler);
       }
     }
     bag.close();
@@ -418,7 +414,8 @@ int main(int argc, char **argv) {
         << "Offline mode is on, so bag_filename will be ignored.";
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
         "/velodyne_points", 10,
-        boost::bind(HandleLaserCloudMsg, _1, boost::ref(laser_odometry)));
+        boost::bind(HandleLaserCloudMsg, _1,
+                    boost::ref(laser_odometry_handler)));
     ros::spin();
   }
 

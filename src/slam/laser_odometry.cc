@@ -51,10 +51,11 @@
 #include "slam/laser_odometry.h"
 #include "slam/scan_matching/odometry_scan_matcher.h"
 
-LaserOdometry::LaserOdometry(bool is_offline_mode, ros::NodeHandle& nh)
-    : laser_mapper_(std::make_shared<LaserMapping>(is_offline_mode, nh)),
-      is_system_inited_(false),
-      curr_frame_idx_(0) {
+LaserOdometry::LaserOdometry(bool is_offline_mode)
+    : laser_mapper_handler_(std::make_shared<LaserMapping>(is_offline_mode)) {
+  // NodeHandle uses reference counting internally,
+  // thus a local variable can be created here
+  ros::NodeHandle nh;
   LOG(INFO) << "LaserOdometry initializing ...";
   laser_odom_publisher_ =
       nh.advertise<nav_msgs::Odometry>("/laser_odom_to_init", 100);
@@ -63,33 +64,24 @@ LaserOdometry::LaserOdometry(bool is_offline_mode, ros::NodeHandle& nh)
 
 LaserOdometry::~LaserOdometry() { LOG(INFO) << "LaserOdometry finished."; }
 
-void LaserOdometry::AddLaserScan(const TimestampedPointCloud& scan) {
-  /**
-   * @brief 获取消息
-   *
-   */
-  scan_curr_ = scan;
-
+void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   TicToc t_whole;
   // initializing
-  if (!is_system_inited_) {
-    is_system_inited_ = true;
+  if (scan_last_.cloud_full_res->empty()) {
     LOG(INFO) << "[ODO] Initializing ...";
   } else {
-    OdometryScanMatcher::Match(scan_last_, scan_curr_, &pose_curr2last_);
+    OdometryScanMatcher::Match(scan_last_, scan_curr, &pose_curr2last_);
 
     LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
     LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
     pose_scan2world_ = pose_scan2world_ * pose_curr2last_;
   }
 
-  TicToc t_pub;
-
   // publish odometry
   nav_msgs::Odometry laserOdometry;
   laserOdometry.header.frame_id = "/camera_init";
   laserOdometry.child_frame_id = "/laser_odom";
-  laserOdometry.header.stamp = scan_curr_.timestamp;
+  laserOdometry.header.stamp = scan_curr.timestamp;
   laserOdometry.pose = ToRos(pose_scan2world_);
   laser_odom_publisher_.publish(laserOdometry);
 
@@ -101,14 +93,12 @@ void LaserOdometry::AddLaserScan(const TimestampedPointCloud& scan) {
   laser_path_.header.frame_id = "/camera_init";
   laser_path_publisher_.publish(laser_path_);
 
-  scan_curr_.odom_pose = pose_scan2world_;
-  laser_mapper_->AddLaserOdometryResult(scan_curr_);
+  scan_curr.odom_pose = pose_scan2world_;
+  laser_mapper_handler_->AddLaserOdometryResult(scan_curr);
 
-  std::swap(scan_last_, scan_curr_);
+  scan_last_ = scan_curr;
 
-  LOG_STEP_TIME("ODO", "publication", t_pub.toc());
-  LOG_STEP_TIME("ODO", "whole laserOdometry", t_whole.toc());
-  if (t_whole.toc() > 100) LOG(WARNING) << "odometry process over 100ms!!";
-
-  curr_frame_idx_++;
+  LOG_STEP_TIME("ODO", "Whole LaserOdometry", t_whole.toc());
+  LOG_IF_EVERY_N(WARNING, t_whole.toc() > 100, 10)
+      << "Odometry process over 100ms!!";
 }
