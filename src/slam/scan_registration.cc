@@ -407,8 +407,6 @@ int main(int argc, char **argv) {
       }
     }
     bag.close();
-    // Waiting for background thread to shutdown
-    ros::shutdown();
   } else {
     LOG_IF(WARNING, !FLAGS_bag_filename.empty())
         << "Offline mode is on, so bag_filename will be ignored.";
