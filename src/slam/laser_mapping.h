@@ -2,8 +2,8 @@
 // Created by whu on 12/24/19.
 //
 
-#ifndef ALOAM_VELODYNE_LASER_MAPPING_H
-#define ALOAM_VELODYNE_LASER_MAPPING_H
+#ifndef MSF_LOAM_VELODYNE_LASER_MAPPING_H
+#define MSF_LOAM_VELODYNE_LASER_MAPPING_H
 
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
@@ -77,4 +77,4 @@ class LaserMapping {
   ros::Publisher cloud_surf_less_publisher_;
 };
 
-#endif  // ALOAM_VELODYNE_LASER_MAPPING_H
+#endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H

@@ -1,7 +1,5 @@
 <launch>
-    
-
-    <node name="kittiHelper" pkg="aloam_velodyne" type="kittiHelper" output="screen"> 
+    <node name="kittiHelper" pkg="msf_loam_velodyne" type="kittiHelper" output="screen"> 
         <param name="dataset_folder" type="string" value="/data/KITTI/odometry/" />
         <param name="sequence_number" type="string" value="00" />
         <param name="to_bag" type="bool" value="false" />

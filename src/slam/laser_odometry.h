@@ -2,8 +2,8 @@
 // Created by whu on 1/2/20.
 //
 
-#ifndef ALOAM_VELODYNE_LASER_ODOMETRY_H
-#define ALOAM_VELODYNE_LASER_ODOMETRY_H
+#ifndef MSF_LOAM_VELODYNE_LASER_ODOMETRY_H
+#define MSF_LOAM_VELODYNE_LASER_ODOMETRY_H
 
 #include <ros/node_handle.h>
 
@@ -39,4 +39,4 @@ class LaserOdometry {
   int curr_frame_idx_;
 };
 
-#endif  // ALOAM_VELODYNE_LASER_ODOMETRY_H
+#endif  // MSF_LOAM_VELODYNE_LASER_ODOMETRY_H

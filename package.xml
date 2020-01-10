@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>aloam_velodyne</name>
+  <name>msf_loam_velodyne</name>
   <version>0.0.0</version>
 
   <description>

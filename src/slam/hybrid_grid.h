@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef ALOAM_VELODYNE_HYBRID_GRID_H
-#define ALOAM_VELODYNE_HYBRID_GRID_H
+#ifndef MSF_LOAM_VELODYNE_HYBRID_GRID_H
+#define MSF_LOAM_VELODYNE_HYBRID_GRID_H
 
 #include <pcl/filters/filter.h>
 
@@ -38,4 +38,4 @@ class HybridGrid {
   HybridGridImpl* hybrid_grid_;
 };
 
-#endif  // ALOAM_VELODYNE_HYBRID_GRID_H
+#endif  // MSF_LOAM_VELODYNE_HYBRID_GRID_H
