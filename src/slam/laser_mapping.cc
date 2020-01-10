@@ -16,6 +16,7 @@
 namespace {
 
 bool g_is_offline_mode;
+bool g_should_exit = false;
 
 }  // namespace
 
@@ -67,6 +68,10 @@ LaserMapping::LaserMapping(bool is_offline_mode)
 }
 
 LaserMapping::~LaserMapping() {
+  {
+    std::unique_lock<std::mutex> ul(mutex_);
+    g_should_exit = true;
+  }
   thread_.join();
   LOG(INFO) << "LaserMapping finished.";
 }
@@ -92,10 +97,15 @@ void LaserMapping::Run() {
     {
       std::unique_lock<std::mutex> ul(mutex_);
       // Try to get new messages in 50 ms, return false if failed
-      bool is_msg_recv = cv_.wait_for(
+      bool has_new_msg = cv_.wait_for(
           ul, std::chrono::milliseconds(50),
           [this] { return !this->odometry_result_queue_.empty(); });
-      if (!is_msg_recv) continue;
+      if (!has_new_msg) {
+        if (g_should_exit)
+          break;
+        else
+          continue;
+      }
       odom_result = odometry_result_queue_.front();
       odometry_result_queue_.pop();
       if (!g_is_offline_mode) {
