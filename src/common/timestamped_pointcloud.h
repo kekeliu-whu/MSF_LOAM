@@ -41,4 +41,4 @@ inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
   return cloud_out;
 }
 
-#endif  // ALOAM_VELODYNE_TIME_STAMPED_POINT_CLOUD_H
+#endif  // MSF_LOAM_VELODYNE_TIME_STAMPED_POINT_CLOUD_H

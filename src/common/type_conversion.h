@@ -2,8 +2,8 @@
 // Created by whu on 12/16/19.
 //
 
-#ifndef ALOAM_VELODYNE_TYPE_CONVERSION_H
-#define ALOAM_VELODYNE_TYPE_CONVERSION_H
+#ifndef MSF_LOAM_VELODYNE_TYPE_CONVERSION_H
+#define MSF_LOAM_VELODYNE_TYPE_CONVERSION_H
 
 #include <geometry_msgs/PoseWithCovariance.h>
 
@@ -33,4 +33,4 @@ inline geometry_msgs::PoseWithCovariance ToRos(const Rigid3d &pose) {
   return pose_msg;
 }
 
-#endif  // ALOAM_VELODYNE_TYPE_CONVERSION_H
+#endif  // MSF_LOAM_VELODYNE_TYPE_CONVERSION_H
