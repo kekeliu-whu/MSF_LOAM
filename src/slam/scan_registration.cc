@@ -70,8 +70,6 @@ std::vector<int> g_cloud_sorted_indices(400000);  // 通过曲率对点排序
 std::vector<bool> g_is_cloud_neighbor_picked(400000);  // 临近点是否已被选取
 std::vector<int> g_cloud_labels(400000);  // 扫描线上点的类型
 
-std::shared_ptr<LaserOdometry> laser_odometry;
-
 }  // namespace
 
 template <typename PointT>
@@ -104,7 +102,8 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
 }
 
 void HandleLaserCloudMsg(
-    const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg) {
+    const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
+    const std::shared_ptr<LaserOdometry> &laser_odometry) {
   g_cloud_index_curr++;
 
   TicToc t_whole;
@@ -379,14 +378,16 @@ void HandleLaserCloudMsg(
 }
 
 int main(int argc, char **argv) {
+  // Set glog and gflags
   FLAGS_alsologtostderr = true;
   FLAGS_colorlogtostderr = true;
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  // Set ROS node
   ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
 
-  // 获取ROS参数
   LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 16))
       << "Use default scan_line: 16";
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
@@ -394,7 +395,8 @@ int main(int argc, char **argv) {
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
       << "only support velodyne with 16, 32 or 64 scan line!";
 
-  laser_odometry = std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, nh);
+  auto laser_odometry =
+      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, nh);
 
   if (FLAGS_is_offline_mode) {
     CHECK(!FLAGS_bag_filename.empty());
@@ -405,17 +407,18 @@ int main(int argc, char **argv) {
     for (rosbag::MessageInstance const m : rosbag::View(bag)) {
       auto msg = m.instantiate<sensor_msgs::PointCloud2>();
       if (msg) {
-        HandleLaserCloudMsg(msg);
+        HandleLaserCloudMsg(msg, laser_odometry);
       }
     }
     bag.close();
-    // Wait for laser mapping thread die
-    laser_odometry.reset();
+    // Waiting for background thread to shutdown
+    ros::shutdown();
   } else {
     LOG_IF(WARNING, !FLAGS_bag_filename.empty())
         << "Offline mode is on, so bag_filename will be ignored.";
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
-        "/velodyne_points", 10, HandleLaserCloudMsg);
+        "/velodyne_points", 10,
+        boost::bind(HandleLaserCloudMsg, _1, boost::ref(laser_odometry)));
     ros::spin();
   }
 
