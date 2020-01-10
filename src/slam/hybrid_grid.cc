@@ -474,7 +474,6 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
       if (point.getVector3fMap().norm() > kDist) continue;
       auto new_point = pose.cast<float>() * point.getVector3fMap();
       // TODO
-      // Need to get more points!
       auto grid_id = this->GetCellIndex(new_point);
       for (int i = -1; i <= 1; ++i) {
         for (int j = -1; j <= 1; ++j) {

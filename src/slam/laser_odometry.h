@@ -12,19 +12,16 @@
 
 class LaserOdometry {
  public:
-  LaserOdometry(bool is_offline_mode, ros::NodeHandle &nh);
+  explicit LaserOdometry(bool is_offline_mode);
 
   ~LaserOdometry();
 
-  void AddLaserScan(const TimestampedPointCloud &scan);
+  void AddLaserScan(TimestampedPointCloud scan_curr);
 
  private:
-  std::shared_ptr<LaserMapping> laser_mapper_;
-
-  bool is_system_inited_;
+  std::shared_ptr<LaserMapping> laser_mapper_handler_;
 
   TimestampedPointCloud scan_last_;
-  TimestampedPointCloud scan_curr_;
 
   // Transformation from scan to map
   Rigid3d pose_scan2world_;
@@ -35,8 +32,6 @@ class LaserOdometry {
   ros::Publisher laser_path_publisher_;
 
   nav_msgs::Path laser_path_;
-
-  int curr_frame_idx_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_ODOMETRY_H
