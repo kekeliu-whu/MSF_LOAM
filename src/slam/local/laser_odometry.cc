@@ -47,8 +47,8 @@
 
 #include "common/rigid_transform.h"
 #include "common/tic_toc.h"
-#include "slam/laser_mapping.h"
-#include "slam/laser_odometry.h"
+#include "laser_mapping.h"
+#include "laser_odometry.h"
 #include "slam/scan_matching/odometry_scan_matcher.h"
 
 LaserOdometry::LaserOdometry(bool is_offline_mode)
@@ -81,7 +81,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   nav_msgs::Odometry laserOdometry;
   laserOdometry.header.frame_id = "/camera_init";
   laserOdometry.child_frame_id = "/laser_odom";
-  laserOdometry.header.stamp = scan_curr.timestamp;
+  laserOdometry.header.stamp = ToRos(scan_curr.timestamp);
   laserOdometry.pose = ToRos(pose_scan2world_);
   laser_odom_publisher_.publish(laserOdometry);
 
