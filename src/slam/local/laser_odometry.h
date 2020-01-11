@@ -8,7 +8,7 @@
 #include <ros/node_handle.h>
 
 #include "common/timestamped_pointcloud.h"
-#include "slam/laser_mapping.h"
+#include "laser_mapping.h"
 
 class LaserOdometry {
  public:

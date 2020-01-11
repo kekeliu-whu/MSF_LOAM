@@ -50,7 +50,8 @@
 
 #include "common/common.h"
 #include "common/tic_toc.h"
-#include "slam/laser_odometry.h"
+#include "common/type_conversion.h"
+#include "slam/local/laser_odometry.h"
 
 DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
 
@@ -360,7 +361,7 @@ void HandleLaserCloudMsg(
   LOG_STEP_TIME("REG", "Seperate points", t_pts.toc());
 
   TimestampedPointCloud scan;
-  scan.timestamp = laser_cloud_msg->header.stamp;
+  scan.timestamp = FromRos(laser_cloud_msg->header.stamp);
   scan.cloud_full_res = laser_cloud;
   scan.cloud_surf_less_flat = cloud_surf_less_flat;
   scan.cloud_surf_flat = cloud_surf_flat;

@@ -6,14 +6,14 @@
 #define LOAM_VELODYNE_TIMESTAMPED_POINTCLOUD_H
 
 #include <pcl/point_cloud.h>
-#include <ros/time.h>
 #include <Eigen/Eigen>
 
 #include "common/common.h"
 #include "common/rigid_transform.h"
+#include "common/time2.h"
 
 struct TimestampedPointCloud {
-  ros::Time timestamp;
+  Time timestamp;
   std::string frame_id;
   Rigid3d odom_pose;
   Rigid3d map_pose;

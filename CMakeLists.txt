@@ -37,12 +37,14 @@ catkin_package(
 
 
 add_executable(msf_loam_node
+  src/slam/hybrid_grid.cc
   src/slam/scan_registration.cc
-  src/slam/laser_mapping.cc
-  src/slam/laser_odometry.cc
+  src/slam/global/global_optimization.cc
+  src/slam/local/laser_mapping.cc
+  src/slam/local/laser_odometry.cc
   src/slam/scan_matching/odometry_scan_matcher.cc
   src/slam/scan_matching/mapping_scan_matcher.cc
-  src/slam/hybrid_grid.cc)
+  )
 target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES})
 
 add_executable(kittiHelper src/slam/kitti_helper.cc)
