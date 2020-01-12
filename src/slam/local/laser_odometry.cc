@@ -36,20 +36,20 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <common/type_conversion.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <slam/type_conversion.h>
 #include <queue>
 
 #include "common/rigid_transform.h"
 #include "common/tic_toc.h"
-#include "laser_mapping.h"
-#include "laser_odometry.h"
-#include "slam/scan_matching/odometry_scan_matcher.h"
+#include "slam/local/laser_mapping.h"
+#include "slam/local/laser_odometry.h"
+#include "slam/local/scan_matching/odometry_scan_matcher.h"
 
 LaserOdometry::LaserOdometry(bool is_offline_mode)
     : laser_mapper_handler_(std::make_shared<LaserMapping>(is_offline_mode)) {

@@ -9,9 +9,9 @@
 #include <ros/init.h>
 #include <tf/transform_broadcaster.h>
 
-#include "common/type_conversion.h"
-#include "laser_mapping.h"
-#include "slam/scan_matching/mapping_scan_matcher.h"
+#include "slam/local/laser_mapping.h"
+#include "slam/local/scan_matching/mapping_scan_matcher.h"
+#include "slam/type_conversion.h"
 
 namespace {
 

@@ -5,8 +5,8 @@
 #include <pcl/kdtree/kdtree_flann.h>
 
 #include "common/tic_toc.h"
+#include "lidar_factor.h"
 #include "mapping_scan_matcher.h"
-#include "slam/scan_matching/lidar_factor.h"
 
 bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
                                const TimestampedPointCloud &scan_curr,
