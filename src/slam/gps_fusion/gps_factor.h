@@ -51,12 +51,6 @@ struct RelativePoseFactor {
     Eigen::Map<Vector<T>>{residual} = pose_residual.translation() / T(st_);
     Eigen::Map<Vector<T>>{residual + 3} =
         pose_residual.rotation().coeffs().template head<3>() / T(sr_);
-    //    residual[0] = pose_residual.translation().x() / T(st_);
-    //    residual[1] = pose_residual.translation().y() / T(st_);
-    //    residual[2] = pose_residual.translation().z() / T(st_);
-    //    residual[3] = pose_residual.rotation().x() / T(sr_);
-    //    residual[4] = pose_residual.rotation().y() / T(sr_);
-    //    residual[5] = pose_residual.rotation().z() / T(sr_);
     return true;
   }
 

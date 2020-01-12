@@ -1,10 +1,6 @@
 //
 // Created by whu on 12/7/19.
 //
-
-#ifndef LOAM_VELODYNE_RIGID_TRANSFORMER_H
-#define LOAM_VELODYNE_RIGID_TRANSFORMER_H
-
 /*
  * Copyright 2016 The Cartographer Authors
  *
@@ -20,6 +16,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#ifndef LOAM_VELODYNE_RIGID_TRANSFORMER_H
+#define LOAM_VELODYNE_RIGID_TRANSFORMER_H
 
 #include <cmath>
 #include <iostream>
