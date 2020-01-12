@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(msf_loam_velodyne)
 
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+  set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
+endif()
+
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-Ofast -Wall -g")
 
