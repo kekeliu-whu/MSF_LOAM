@@ -125,7 +125,7 @@ struct LidarPlaneFactor {
  * @brief “点-面”距离最小化
  *
  * 已知平面到原点的法向量n、平面到原点的距离l、点p
- * 
+ *
  * 则 dist=n·p+l
  *
  */

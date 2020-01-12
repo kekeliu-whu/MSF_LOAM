@@ -8,7 +8,7 @@
 #include <geometry_msgs/PoseWithCovariance.h>
 
 #include "common/rigid_transform.h"
-#include "common/time2.h"
+#include "common/time_def.h"
 
 inline Rigid3d FromRos(const geometry_msgs::PoseWithCovariance &pose_msg) {
   Rigid3d pose;

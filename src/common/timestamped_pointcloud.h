@@ -10,7 +10,7 @@
 
 #include "common/common.h"
 #include "common/rigid_transform.h"
-#include "common/time2.h"
+#include "common/time_def.h"
 
 struct TimestampedPointCloud {
   Time timestamp;

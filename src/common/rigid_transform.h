@@ -28,29 +28,29 @@
 #include "Eigen/Core"
 #include "Eigen/Geometry"
 
+template <typename T>
+using Vector = Eigen::Matrix<T, 3, 1>;
+
+template <typename T>
+using Quaternion = Eigen::Quaternion<T>;
+
 template <typename FloatType>
 class Rigid3 {
  public:
-  using Vector = Eigen::Matrix<FloatType, 3, 1>;
-  using Quaternion = Eigen::Quaternion<FloatType>;
+  using Vector_ = Vector<FloatType>;
+  using Quaternion_ = Quaternion<FloatType>;
 
-  Rigid3() : translation_(Vector::Zero()), rotation_(Quaternion::Identity()) {}
-  Rigid3(const Vector& translation, const Quaternion& rotation)
+  Rigid3()
+      : translation_(Vector_::Zero()), rotation_(Quaternion_::Identity()) {}
+  Rigid3(const Vector_& translation, const Quaternion_& rotation)
       : translation_(translation), rotation_(rotation) {}
 
-  static Rigid3 Rotation(const Quaternion& rotation) {
-    return Rigid3(Vector::Zero(), rotation);
+  static Rigid3 Rotation(const Quaternion_& rotation) {
+    return Rigid3(Vector_::Zero(), rotation);
   }
 
-  static Rigid3 Translation(const Vector& vector) {
-    return Rigid3(vector, Quaternion::Identity());
-  }
-
-  static Rigid3 FromArrays(const std::array<FloatType, 4>& rotation,
-                           const std::array<FloatType, 3>& translation) {
-    return Rigid3(Eigen::Map<const Vector>(translation.data()),
-                  Eigen::Quaternion<FloatType>(rotation[0], rotation[1],
-                                               rotation[2], rotation[3]));
+  static Rigid3 Translation(const Vector_& vector) {
+    return Rigid3(vector, Quaternion_::Identity());
   }
 
   static Rigid3<FloatType> Identity() { return Rigid3<FloatType>(); }
@@ -61,14 +61,14 @@ class Rigid3 {
                              rotation_.template cast<OtherType>());
   }
 
-  const Vector& translation() const { return translation_; }
-  const Quaternion& rotation() const { return rotation_; }
-  Vector& translation() { return translation_; }
-  Quaternion& rotation() { return rotation_; }
+  const Vector_& translation() const { return translation_; }
+  const Quaternion_& rotation() const { return rotation_; }
+  Vector_& translation() { return translation_; }
+  Quaternion_& rotation() { return rotation_; }
 
   Rigid3 inverse() const {
-    const Quaternion rotation = rotation_.conjugate();
-    const Vector translation = -(rotation * translation_);
+    const Quaternion_ rotation = rotation_.conjugate();
+    const Vector_ translation = -(rotation * translation_);
     return Rigid3(translation, rotation);
   }
 
@@ -88,8 +88,8 @@ class Rigid3 {
   }
 
  private:
-  Vector translation_;
-  Quaternion rotation_;
+  Vector_ translation_;
+  Quaternion_ rotation_;
 };
 
 template <typename FloatType>
@@ -101,9 +101,9 @@ Rigid3<FloatType> operator*(const Rigid3<FloatType>& lhs,
 }
 
 template <typename FloatType>
-inline typename Rigid3<FloatType>::Vector operator*(
+inline typename Rigid3<FloatType>::Vector_ operator*(
     const Rigid3<FloatType>& rigid,
-    const typename Rigid3<FloatType>::Vector& point) {
+    const typename Rigid3<FloatType>::Vector_& point) {
   return rigid.rotation() * point + rigid.translation();
 }
 
