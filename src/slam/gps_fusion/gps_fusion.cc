@@ -3,7 +3,7 @@
 
 namespace {
 
-bool CompareTimeLT(const LocalPose& l, const FixedPoint& r) {
+bool CompareTimeLT(const FixedPoint& l, const LocalPose& r) {
   return l.timestamp < r.timestamp;
 }
 
@@ -45,7 +45,7 @@ void GpsFusion::Optimize() {
   }
 
   for (auto& fixed_point : fixed_points_) {
-    auto local_pose_j = std::lower_bound(
+    auto local_pose_j = std::upper_bound(
         local_poses_.begin(), local_poses_.end(), fixed_point, CompareTimeLT);
     auto local_pose_i = std::prev(local_pose_j);
     double t = (fixed_point.timestamp - local_pose_i->timestamp).count() * 1.0 /
