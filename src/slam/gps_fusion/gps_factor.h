@@ -7,26 +7,25 @@
 #include "common/rigid_transform.h"
 
 struct GpsFactor {
-  GpsFactor(const Eigen::Vector3d &t_gps, const double st)
-      : t_gps_(t_gps), st_(st) {}
+  GpsFactor(const Eigen::Vector3d &t_gps, double t, double st)
+      : t_gps_(t_gps), t_(t), st_(st) {}
 
-  // TODO
-  // time not aligned yet
   template <typename T>
-  bool operator()(const T *t, T *residual) const {
-    Eigen::Map<Vector<T>>{residual} =
-        (Vector<T>(t) - t_gps_.cast<T>()) / T(st_);
+  bool operator()(const T *t_i, const T *t_j, T *residual) const {
+    Vector<T> t = T(1 - t_) * Vector<T>(t_i) + T(t_) * Vector<T>(t_j);
+    Eigen::Map<Vector<T>>{residual} = (t - t_gps_.cast<T>()) / T(st_);
     return true;
   }
 
-  static ceres::CostFunction *Create(const Eigen::Vector3d &t_gps,
-                                     const double st) {
-    return new ceres::AutoDiffCostFunction<GpsFactor, 3, 3>(
-        new GpsFactor(t_gps, st));
+  static ceres::CostFunction *Create(const Eigen::Vector3d &t_gps, double t,
+                                     double st) {
+    return new ceres::AutoDiffCostFunction<GpsFactor, 3, 3, 3>(
+        new GpsFactor(t_gps, t, st));
   }
 
  private:
   Eigen::Vector3d t_gps_;
+  double t_;
   double st_;
 };
 
