@@ -45,11 +45,16 @@ void GpsFusion::Optimize() {
   }
 
   for (auto& fixed_point : fixed_points_) {
-    auto local_pose_i = std::lower_bound(
+    auto local_pose_j = std::lower_bound(
         local_poses_.begin(), local_poses_.end(), fixed_point, CompareTimeLT);
-    auto cost_function = GpsFactor::Create(fixed_point.translation, 0.01);
+    auto local_pose_i = std::prev(local_pose_j);
+    double t = (fixed_point.timestamp - local_pose_i->timestamp).count() * 1.0 /
+               (local_pose_j->timestamp - local_pose_i->timestamp).count();
+    CHECK(t >= 0 && t <= 1);
+    auto cost_function = GpsFactor::Create(fixed_point.translation, t, 0.01);
     problem.AddResidualBlock(cost_function, loss_function,
-                             local_pose_i->pose.translation().data());
+                             local_pose_i->pose.translation().data(),
+                             local_pose_j->pose.translation().data());
   }
 
   for (size_t i = 0; i < local_poses_.size() - 1; ++i) {
