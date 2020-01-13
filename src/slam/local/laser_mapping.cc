@@ -11,7 +11,7 @@
 
 #include "slam/local/laser_mapping.h"
 #include "slam/local/scan_matching/mapping_scan_matcher.h"
-#include "slam/type_conversion.h"
+#include "slam/msg_conversion.h"
 
 namespace {
 

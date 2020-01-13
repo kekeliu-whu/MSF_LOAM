@@ -20,20 +20,14 @@ struct UniversalTimeScaleClock {
 using Duration = UniversalTimeScaleClock::duration;
 using Time = UniversalTimeScaleClock::time_point;
 
-inline Duration FromSeconds(double seconds) {
-  return std::chrono::duration_cast<Duration>(
-      std::chrono::duration<double>(seconds));
-}
+Duration FromSeconds(double seconds);
 
-inline double ToSeconds(Duration duration) {
-  return std::chrono::duration_cast<std::chrono::duration<double>>(duration)
-      .count();
-}
+double ToSeconds(Duration duration);
 
-inline Time FromUniversal(int64_t ticks) { return Time(Duration(ticks)); }
+Time FromUniversal(int64_t ticks);
 
-inline int64_t ToUniversal(Time time) {
-  return time.time_since_epoch().count();
-}
+int64_t ToUniversal(Time time);
+
+std::ostream& operator<<(std::ostream& os, const Time time);
 
 #endif  // MSF_LOAM_VELODYNE_TIME_H

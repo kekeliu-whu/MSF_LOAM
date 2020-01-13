@@ -2,9 +2,9 @@ cmake_minimum_required(VERSION 2.8.3)
 project(msf_loam_velodyne)
 
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if (CCACHE_PROGRAM)
   set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_PROGRAM}")
-endif()
+endif ()
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-Ofast -Wall -g")
@@ -42,7 +42,9 @@ catkin_package(
 
 
 add_executable(msf_loam_node
+  src/common/time_def.cc
   src/slam/hybrid_grid.cc
+  src/slam/msg_conversion.cc
   src/slam/scan_registration.cc
   src/slam/gps_fusion/gps_fusion.cc
   src/slam/local/laser_mapping.cc

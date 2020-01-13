@@ -50,8 +50,8 @@
 
 #include "common/common.h"
 #include "common/tic_toc.h"
+#include "msg_conversion.h"
 #include "slam/local/laser_odometry.h"
-#include "type_conversion.h"
 
 DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
 
