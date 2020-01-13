@@ -1,7 +1,3 @@
-//
-// Created by whu on 1/12/20.
-//
-
 #ifndef MSF_LOAM_VELODYNE_GPS_FACTOR_H
 #define MSF_LOAM_VELODYNE_GPS_FACTOR_H
 

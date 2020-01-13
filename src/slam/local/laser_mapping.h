@@ -1,7 +1,3 @@
-//
-// Created by whu on 12/24/19.
-//
-
 #ifndef MSF_LOAM_VELODYNE_LASER_MAPPING_H
 #define MSF_LOAM_VELODYNE_LASER_MAPPING_H
 

@@ -1,7 +1,3 @@
-//
-// Created by whu on 12/16/19.
-//
-
 #ifndef MSF_LOAM_VELODYNE_MSG_CONVERSION_H
 #define MSF_LOAM_VELODYNE_MSG_CONVERSION_H
 

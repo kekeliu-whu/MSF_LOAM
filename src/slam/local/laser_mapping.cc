@@ -1,7 +1,3 @@
-//
-// Created by whu on 12/24/19.
-//
-
 #include <common/tic_toc.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
