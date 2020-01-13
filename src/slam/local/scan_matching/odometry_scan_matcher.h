@@ -1,7 +1,3 @@
-//
-// Created by whu on 12/7/19.
-//
-
 #ifndef LOAM_VELODYNE_ODOMETRY_SCAN_MATCHER_H
 #define LOAM_VELODYNE_ODOMETRY_SCAN_MATCHER_H
 

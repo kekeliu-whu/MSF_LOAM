@@ -1,7 +1,3 @@
-//
-// Created by whu on 12/16/19.
-//
-
 #include "slam/msg_conversion.h"
 
 Rigid3d FromRos(const geometry_msgs::PoseWithCovariance &pose_msg) {

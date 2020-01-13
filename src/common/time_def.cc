@@ -1,7 +1,3 @@
-//
-// Created by whu on 1/11/20.
-//
-
 #include <ostream>
 
 #include "common/time_def.h"

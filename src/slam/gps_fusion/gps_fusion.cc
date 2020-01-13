@@ -1,7 +1,3 @@
-//
-// Created by whu on 1/11/20.
-//
-
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/gps_fusion/gps_factor.h"
 

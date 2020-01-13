@@ -54,5 +54,12 @@ add_executable(msf_loam_node
   )
 target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES})
 
+add_executable(msf_loam_gps_fusion_test
+  src/common/time_def.cc
+  src/slam/gps_fusion/gps_fusion.cc
+  src/slam/gps_fusion/gps_fusion_test.cc
+  )
+target_link_libraries(msf_loam_gps_fusion_test ${CERES_LIBRARIES} gtest)
+
 add_executable(kittiHelper src/slam/kitti_helper.cc)
 target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})

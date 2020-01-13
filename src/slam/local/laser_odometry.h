@@ -1,7 +1,3 @@
-//
-// Created by whu on 1/2/20.
-//
-
 #ifndef MSF_LOAM_VELODYNE_LASER_ODOMETRY_H
 #define MSF_LOAM_VELODYNE_LASER_ODOMETRY_H
 

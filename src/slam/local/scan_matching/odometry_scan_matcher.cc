@@ -1,7 +1,3 @@
-//
-// Created by whu on 12/7/19.
-//
-
 #include <ceres/ceres.h>
 #include <pcl/kdtree/kdtree_flann.h>
 

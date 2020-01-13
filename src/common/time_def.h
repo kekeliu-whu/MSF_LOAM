@@ -1,7 +1,3 @@
-//
-// Created by whu on 1/11/20.
-//
-
 #ifndef MSF_LOAM_VELODYNE_TIME_H
 #define MSF_LOAM_VELODYNE_TIME_H
 

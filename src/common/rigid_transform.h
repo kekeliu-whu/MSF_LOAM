@@ -1,6 +1,3 @@
-//
-// Created by whu on 12/7/19.
-//
 /*
  * Copyright 2016 The Cartographer Authors
  *
