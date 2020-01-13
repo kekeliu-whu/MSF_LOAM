@@ -32,11 +32,11 @@ class LaserMapping {
   void PublishScan(const TimestampedPointCloud &scan);
 
   // set initial guess for pose
-  inline void transformAssociateToMap() {
+  void transformAssociateToMap() {
     pose_map_scan2world_ = pose_odom2map_ * pose_odom_scan2world_;
   }
 
-  inline void transformUpdate() {
+  void transformUpdate() {
     pose_odom2map_ = pose_map_scan2world_ * pose_odom_scan2world_.inverse();
   }
 
