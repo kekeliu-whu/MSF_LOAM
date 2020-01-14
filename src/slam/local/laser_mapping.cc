@@ -4,6 +4,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/init.h>
 #include <tf/transform_broadcaster.h>
+#include <random>
 
 #include "slam/local/laser_mapping.h"
 #include "slam/local/scan_matching/mapping_scan_matcher.h"
@@ -17,7 +18,8 @@ bool g_should_exit = false;
 }  // namespace
 
 LaserMapping::LaserMapping(bool is_offline_mode)
-    : frame_idx_cur_(0),
+    : gps_fusion_handler_(std::make_shared<GpsFusion>()),
+      frame_idx_cur_(0),
       hybrid_grid_map_corner_(3.0),
       hybrid_grid_map_surf_(3.0) {
   g_is_offline_mode = is_offline_mode;
@@ -69,6 +71,7 @@ LaserMapping::~LaserMapping() {
     g_should_exit = true;
   }
   thread_.join();
+  gps_fusion_handler_->Optimize();
   LOG(INFO) << "LaserMapping finished.";
 }
 
@@ -199,6 +202,28 @@ void LaserMapping::Run() {
     aftmapped_path_.header.frame_id = "/camera_init";
     aftmapped_path_.poses.push_back(laserAfterMappedPose);
     aftmapped_path_publisher_.publish(aftmapped_path_);
+
+    gps_fusion_handler_->AddLocalPose(odom_result.timestamp,
+                                      pose_map_scan2world_);
+
+#ifdef _SIM_GPS
+    /**
+     * Simulate GPS data for GPS fusion
+     */
+    if (frame_idx_cur_ % 20 == 0) {
+      static std::default_random_engine g;
+      static std::uniform_real_distribution<double> dist(-1.0, 1.0);
+      static Quaternion<double> rotation(
+          Eigen::AngleAxis<double>(dist(g) * M_PI, Eigen::Vector3d::UnitZ()));
+      Rigid3d pose(
+          Vector<double>(10.0, 33.3, 4.2) +
+              Vector<double>(dist(g) * 0.05, dist(g) * 0.05, dist(g) * 0.05),
+          rotation);
+      gps_fusion_handler_->AddFixedPoint(
+          odom_result.timestamp + std::chrono::milliseconds(int(dist(g) * 50)),
+          pose * pose_map_scan2world_.translation());
+    }
+#endif
 
     PublishScan(odom_result);
 

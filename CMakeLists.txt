@@ -9,6 +9,8 @@ endif ()
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-Ofast -Wall -g")
 
+#add_definitions(-D_SIM_GPS)
+
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs

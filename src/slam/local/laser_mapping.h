@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "common/timestamped_pointcloud.h"
+#include "slam/gps_fusion/gps_fusion.h"
 #include "slam/hybrid_grid.h"
 
 using LaserOdometryResultType = TimestampedPointCloud;
@@ -37,6 +38,8 @@ class LaserMapping {
   }
 
  private:
+  std::shared_ptr<GpsFusion> gps_fusion_handler_;
+
   int frame_idx_cur_;
 
   std::thread thread_;
