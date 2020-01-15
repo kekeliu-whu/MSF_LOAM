@@ -1,0 +1,19 @@
+<robot name="backpack_3d">
+
+  <link name="base_link" />
+  <link name="imu_link" />
+  <link name="horizontal_vlp16_link" />
+
+  <joint name="imu_link_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="imu_link" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+  <joint name="horizontal_vlp16_link_joint" type="fixed">
+    <parent link="base_link" />
+    <child link="horizontal_vlp16_link" />
+    <origin xyz="-0.165 0.02 0.36" rpy="0 0 0" />
+  </joint>
+
+</robot>
