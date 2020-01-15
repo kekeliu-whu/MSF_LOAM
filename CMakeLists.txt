@@ -9,7 +9,7 @@ endif ()
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-Ofast -Wall -g")
 
-#add_definitions(-D_SIM_GPS)
+add_definitions(-D_SIM_GPS)
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
@@ -46,9 +46,10 @@ catkin_package(
 add_executable(msf_loam_node
   src/common/time_def.cc
   src/slam/hybrid_grid.cc
+  src/slam/imu_fusion/imu_tracker.cc
+  src/slam/gps_fusion/gps_fusion.cc
   src/slam/msg_conversion.cc
   src/slam/scan_registration.cc
-  src/slam/gps_fusion/gps_fusion.cc
   src/slam/local/laser_mapping.cc
   src/slam/local/laser_odometry.cc
   src/slam/local/scan_matching/odometry_scan_matcher.cc

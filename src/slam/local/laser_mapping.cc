@@ -210,14 +210,14 @@ void LaserMapping::Run() {
     /**
      * Simulate GPS data for GPS fusion
      */
-    if (frame_idx_cur_ % 20 == 0) {
+    if (frame_idx_cur_ % 50 == 0) {
       static std::default_random_engine g;
       static std::uniform_real_distribution<double> dist(-1.0, 1.0);
       static Quaternion<double> rotation(
           Eigen::AngleAxis<double>(dist(g) * M_PI, Eigen::Vector3d::UnitZ()));
       Rigid3d pose(
-          Vector<double>(10.0, 33.3, 4.2) +
-              Vector<double>(dist(g) * 0.05, dist(g) * 0.05, dist(g) * 0.05),
+          Vector<double>(1.0, 3.3, 4.2) +
+              0.01 / std::sqrt(3) * Vector<double>(dist(g), dist(g), dist(g)),
           rotation);
       gps_fusion_handler_->AddFixedPoint(
           odom_result.timestamp + std::chrono::milliseconds(int(dist(g) * 50)),
