@@ -11,6 +11,7 @@
 #include "common/timestamped_pointcloud.h"
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/hybrid_grid.h"
+#include "slam/imu_fusion/imu_tracker.h"
 
 using LaserOdometryResultType = TimestampedPointCloud;
 
@@ -22,6 +23,8 @@ class LaserMapping {
 
   void AddLaserOdometryResult(
       const LaserOdometryResultType &laser_odometry_result);
+
+  void AddImu(const ImuData &imu_data);
 
  private:
   void Run();

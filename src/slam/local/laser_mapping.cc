@@ -242,6 +242,12 @@ void LaserMapping::Run() {
   }
 }
 
+void LaserMapping::AddImu(const ImuData &imu_data) {
+  // TODO
+  // calib imu and lidar
+  // LOG(FATAL) << "AddIMU not implemented yet.";
+}
+
 void LaserMapping::PublishScan(const TimestampedPointCloud &scan) {
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*scan.cloud_full_res, laser_cloud_out_msg);

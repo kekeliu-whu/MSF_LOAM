@@ -1,8 +1,3 @@
-//
-// Created by whu on 1/14/20.
-//
-
-#include "imu_tracker.h"
 /*
  * Copyright 2016 The Cartographer Authors
  *
@@ -64,8 +59,7 @@ void ImuTracker::Advance(const Time time) {
   time_ = time;
 }
 
-void ImuTracker::AddImuLinearAccelerationObservation(
-    const Eigen::Vector3d& imu_linear_acceleration) {
+void ImuTracker::AddImuObservation(const ImuData& imu_data) {
   // Update the 'gravity_vector_' with an exponential moving average using the
   // 'imu_gravity_time_constant'.
   const double delta_t = last_linear_acceleration_time_ > Time::min()
@@ -74,7 +68,7 @@ void ImuTracker::AddImuLinearAccelerationObservation(
   last_linear_acceleration_time_ = time_;
   const double alpha = 1. - std::exp(-delta_t / imu_gravity_time_constant_);
   gravity_vector_ =
-      (1. - alpha) * gravity_vector_ + alpha * imu_linear_acceleration;
+      (1. - alpha) * gravity_vector_ + alpha * imu_data.linear_acceleration;
   // Change the 'orientation_' so that it agrees with the current
   // 'gravity_vector_'.
   const Eigen::Quaterniond rotation = Eigen::Quaterniond::FromTwoVectors(
@@ -82,9 +76,6 @@ void ImuTracker::AddImuLinearAccelerationObservation(
   orientation_ = (orientation_ * rotation).normalized();
   CHECK_GT((orientation_ * gravity_vector_).z(), 0.);
   CHECK_GT((orientation_ * gravity_vector_).normalized().z(), 0.99);
-}
 
-void ImuTracker::AddImuAngularVelocityObservation(
-    const Eigen::Vector3d& imu_angular_velocity) {
-  imu_angular_velocity_ = imu_angular_velocity;
+  imu_angular_velocity_ = imu_data.angular_velocity;
 }

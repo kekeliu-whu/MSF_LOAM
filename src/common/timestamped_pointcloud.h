@@ -13,6 +13,7 @@ struct TimestampedPointCloud {
   std::string frame_id;
   Rigid3d odom_pose;
   Rigid3d map_pose;
+  Quaternion<double> imu_rotation;
 
   PointCloudPtr cloud_full_res;
   PointCloudPtr cloud_corner_sharp;
@@ -21,7 +22,8 @@ struct TimestampedPointCloud {
   PointCloudPtr cloud_surf_less_flat;
 
   TimestampedPointCloud()
-      : cloud_full_res(new PointCloud),
+      : imu_rotation(Quaternion<double>(1, 0, 0, 0)),
+        cloud_full_res(new PointCloud),
         cloud_corner_sharp(new PointCloud),
         cloud_corner_less_sharp(new PointCloud),
         cloud_surf_flat(new PointCloud),
