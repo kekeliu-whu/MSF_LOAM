@@ -20,6 +20,12 @@
 #include "Eigen/Geometry"
 #include "common/time_def.h"
 
+struct ImuData {
+  Time time;
+  Eigen::Vector3d linear_acceleration;
+  Eigen::Vector3d angular_velocity;
+};
+
 // Keeps track of the orientation using angular velocities and linear
 // accelerations from an IMU. Because averaged linear acceleration (assuming
 // slow movement) is a direct measurement of gravity, roll/pitch does not drift,
@@ -32,10 +38,7 @@ class ImuTracker {
   void Advance(Time time);
 
   // Updates from an IMU reading (in the IMU frame).
-  void AddImuLinearAccelerationObservation(
-      const Eigen::Vector3d& imu_linear_acceleration);
-  void AddImuAngularVelocityObservation(
-      const Eigen::Vector3d& imu_angular_velocity);
+  void AddImuObservation(const ImuData& imu_data);
 
   // Query the current time.
   Time time() const { return time_; }
