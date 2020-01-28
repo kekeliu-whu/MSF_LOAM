@@ -56,7 +56,7 @@ struct RelativePoseFactor {
         new RelativePoseFactor(pose_gps_i, pose_gps_j, sr, st)));
   }
 
- private:
+ protected:
   Rigid3d pose_gps_ij_;
   double sr_;
   double st_;

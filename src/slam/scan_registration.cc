@@ -419,8 +419,8 @@ int main(int argc, char **argv) {
         HandleLaserCloudMessage(m.instantiate<sensor_msgs::PointCloud2>(),
                                 laser_odometry_handler);
       } else if (m.isType<sensor_msgs::Imu>()) {
-        HandleImuMessage(m.instantiate<sensor_msgs::Imu>(),
-                         laser_odometry_handler);
+//        HandleImuMessage(m.instantiate<sensor_msgs::Imu>(),
+//                         laser_odometry_handler);
       }
     }
     bag.close();
