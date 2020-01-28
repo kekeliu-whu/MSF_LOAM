@@ -54,6 +54,7 @@ add_executable(msf_loam_node
   src/slam/local/laser_odometry.cc
   src/slam/local/scan_matching/odometry_scan_matcher.cc
   src/slam/local/scan_matching/mapping_scan_matcher.cc
+  src/slam/loop_closure/sparse_pose_graph.cc
   )
 target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES})
 
