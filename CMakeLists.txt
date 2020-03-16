@@ -24,7 +24,6 @@ find_package(catkin REQUIRED COMPONENTS
   tf)
 
 find_package(PCL REQUIRED)
-find_package(OpenCV REQUIRED)
 find_package(Ceres REQUIRED)
 
 include_directories(
@@ -33,7 +32,6 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
-  ${OpenCV_INCLUDE_DIRS}
 )
 
 catkin_package(
@@ -66,4 +64,4 @@ add_executable(msf_loam_gps_fusion_test
 target_link_libraries(msf_loam_gps_fusion_test ${CERES_LIBRARIES} gtest)
 
 add_executable(kittiHelper src/slam/kitti_helper.cc)
-target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBS})
+target_link_libraries(kittiHelper ${catkin_LIBRARIES} ${PCL_LIBRARIES})

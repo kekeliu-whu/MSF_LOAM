@@ -1,9 +1,8 @@
 <launch>
     <node name="kittiHelper" pkg="msf_loam_velodyne" type="kittiHelper" output="screen"> 
-        <param name="dataset_folder" type="string" value="/data/KITTI/odometry/" />
+        <param name="dataset_folder" type="string" value="/home/kekeliu/Downloads/aaa/data_odometry_velodyne/dataset/" />
         <param name="sequence_number" type="string" value="00" />
-        <param name="to_bag" type="bool" value="false" />
-        <param name="output_bag_file" type="string" value="/tmp/kitti.bag" /> <!-- replace with your output folder -->
+        <param name="to_bag" type="bool" value="true" />
         <param name="publish_delay" type="int" value="1" />
     </node>
 </launch>
