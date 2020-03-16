@@ -11,15 +11,16 @@
 #include <rosbag/bag.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <Eigen/Dense>
+#include <boost/progress.hpp>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+#include "common/rigid_transform.h"
 
 std::vector<float> read_lidar_data(const std::string lidar_data_path) {
   std::ifstream lidar_data_file(lidar_data_path,
                                 std::ifstream::in | std::ifstream::binary);
-  std::cout << lidar_data_path << std::endl;
   lidar_data_file.seekg(0, std::ios::end);
   const size_t num_elements = lidar_data_file.tellg() / sizeof(float);
   lidar_data_file.seekg(0, std::ios::beg);
@@ -61,12 +62,36 @@ int main(int argc, char** argv) {
   std::ifstream ground_truth_file(dataset_folder + ground_truth_path,
                                   std::ifstream::in);
 
+  std::string calib_path = "sequences/" + sequence_number + "/calib.txt";
+  std::ifstream calib_file(dataset_folder + calib_path, std::ifstream::in);
+
   rosbag::Bag bag_out;
   if (to_bag) bag_out.open(output_bag_file, rosbag::bagmode::Write);
 
-  Eigen::Matrix3d R_transform;
-  R_transform << 0, 0, 1, -1, 0, 0, 0, -1, 0;
-  Eigen::Quaterniond q_transform(R_transform);
+  // Get transform from velodyne lidar to camera
+  Rigid3d Tr;
+  {
+    std::string line;
+    // Read 5th line
+    for (int i = 0; i < 5; ++i) std::getline(calib_file, line);
+    if (line.find("Tr: ") == 0) {
+      line.replace(0, 4, "");
+    } else {
+      std::cerr << "Tr parse failed!";
+      exit(-1);
+    }
+    std::stringstream pose_stream(line);
+    Eigen::Matrix<double, 3, 4> gt_pose;
+    for (std::size_t i = 0; i < 3; ++i) {
+      for (std::size_t j = 0; j < 4; ++j) {
+        std::string s;
+        std::getline(pose_stream, s, ' ');
+        gt_pose(i, j) = stof(s);
+      }
+    }
+    Tr.rotation() = gt_pose.topLeftCorner<3, 3>();
+    Tr.translation() = gt_pose.topRightCorner<3, 1>();
+  }
 
   std::string line;
   std::size_t line_num = 0;
@@ -74,30 +99,34 @@ int main(int argc, char** argv) {
   while (std::getline(timestamp_file, line) && ros::ok()) {
     float timestamp = stof(line);
 
-    std::getline(ground_truth_file, line);
-    std::stringstream pose_stream(line);
-    std::string s;
-    Eigen::Matrix<double, 3, 4> gt_pose;
-    for (std::size_t i = 0; i < 3; ++i) {
-      for (std::size_t j = 0; j < 4; ++j) {
-        std::getline(pose_stream, s, ' ');
-        gt_pose(i, j) = stof(s);
+    Rigid3d Tc;
+    {
+      std::getline(ground_truth_file, line);
+      std::stringstream pose_stream(line);
+      Eigen::Matrix<double, 3, 4> gt_pose;
+      for (std::size_t i = 0; i < 3; ++i) {
+        for (std::size_t j = 0; j < 4; ++j) {
+          std::string s;
+          std::getline(pose_stream, s, ' ');
+          gt_pose(i, j) = stof(s);
+        }
       }
+      Tc.rotation() = gt_pose.topLeftCorner<3, 3>();
+      Tc.translation() = gt_pose.topRightCorner<3, 1>();
     }
 
-    Eigen::Quaterniond q_w_i(gt_pose.topLeftCorner<3, 3>());
-    Eigen::Quaterniond q = q_transform * q_w_i;
-    q.normalize();
-    Eigen::Vector3d t = q_transform * gt_pose.topRightCorner<3, 1>();
+    // todo
+    Rigid3d Tl = Tr.inverse() * Tc * Tr;
+    Tl.rotation().normalize();
 
     odomGT.header.stamp = ros::Time().fromSec(timestamp);
-    odomGT.pose.pose.orientation.x = q.x();
-    odomGT.pose.pose.orientation.y = q.y();
-    odomGT.pose.pose.orientation.z = q.z();
-    odomGT.pose.pose.orientation.w = q.w();
-    odomGT.pose.pose.position.x = t(0);
-    odomGT.pose.pose.position.y = t(1);
-    odomGT.pose.pose.position.z = t(2);
+    odomGT.pose.pose.orientation.x = Tl.rotation().x();
+    odomGT.pose.pose.orientation.y = Tl.rotation().y();
+    odomGT.pose.pose.orientation.z = Tl.rotation().z();
+    odomGT.pose.pose.orientation.w = Tl.rotation().w();
+    odomGT.pose.pose.position.x = Tl.translation().x();
+    odomGT.pose.pose.position.y = Tl.translation().y();
+    odomGT.pose.pose.position.z = Tl.translation().z();
 
     geometry_msgs::PoseStamped poseGT;
     poseGT.header = odomGT.header;
@@ -111,8 +140,8 @@ int main(int argc, char** argv) {
                     << "sequences/" + sequence_number + "/velodyne/"
                     << std::setfill('0') << std::setw(6) << line_num << ".bin";
     std::vector<float> lidar_data = read_lidar_data(lidar_data_path.str());
-    std::cout << "totally " << lidar_data.size() / 4
-              << " points in this lidar frame." << std::endl;
+    std::cout << "Frame " << line_num << ": " << lidar_data.size() / 4
+              << " points." << std::endl;
 
     pcl::PointCloud<pcl::PointXYZI> laser_cloud;
     for (std::size_t i = 0; i < lidar_data.size(); i += 4) {
