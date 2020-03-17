@@ -472,17 +472,16 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
     Set grid_set;
     for (auto& point : *scan) {
       if (point.getVector3fMap().norm() > kDist) continue;
-      auto new_point = pose.cast<float>() * point.getVector3fMap();
-      // TODO
-      auto grid_id = this->GetCellIndex(new_point);
-      TryInsertGrid(grid_set, grid_id);
-      // for (int i = -1; i <= 1; ++i) {
-      //   for (int j = -1; j <= 1; ++j) {
-      //     for (int k = -1; k <= 1; ++k) {
-      //       TryInsertGrid(grid_set, grid_id + Eigen::Array3i(i, j, k));
-      //     }
-      //   }
-      // }
+      for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+          for (int k = -1; k <= 1; ++k) {
+            auto new_point = pose.cast<float>() * point.getVector3fMap();
+            new_point += Eigen::Vector3f(i, j, k);
+            auto grid_id = this->GetCellIndex(new_point);
+            TryInsertGrid(grid_set, grid_id);
+          }
+        }
+      }
     }
     // auto new_point = pose.cast<float>().translation();
     // auto grid_id = this->GetCellIndex(new_point);
