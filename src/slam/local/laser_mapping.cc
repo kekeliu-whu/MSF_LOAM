@@ -20,8 +20,8 @@ bool g_should_exit = false;
 LaserMapping::LaserMapping(bool is_offline_mode)
     : gps_fusion_handler_(std::make_shared<GpsFusion>()),
       frame_idx_cur_(0),
-      hybrid_grid_map_corner_(10.0),
-      hybrid_grid_map_surf_(10.0) {
+      hybrid_grid_map_corner_(5.0),
+      hybrid_grid_map_surf_(5.0) {
   g_is_offline_mode = is_offline_mode;
   // NodeHandle uses reference counting internally,
   // thus a local variable can be created here
