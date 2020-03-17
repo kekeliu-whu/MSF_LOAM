@@ -26,6 +26,8 @@ class LaserMapping {
 
   void AddImu(const ImuData &imu_data);
 
+  void AddOdom(const OdometryData &odom_data);
+
  private:
   void Run();
 

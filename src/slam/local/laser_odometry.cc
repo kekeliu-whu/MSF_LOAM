@@ -143,3 +143,7 @@ std::unique_ptr<Quaternion<double>> LaserOdometry::AdvanceImuTracker(
   *r = imu_tracker_->orientation();
   return r;
 }
+
+void LaserOdometry::AddOdom(const OdometryData &odom_data) {
+  laser_mapper_handler_->AddOdom(odom_data);
+}

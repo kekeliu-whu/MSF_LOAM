@@ -20,8 +20,8 @@ bool g_should_exit = false;
 LaserMapping::LaserMapping(bool is_offline_mode)
     : gps_fusion_handler_(std::make_shared<GpsFusion>()),
       frame_idx_cur_(0),
-      hybrid_grid_map_corner_(3.0),
-      hybrid_grid_map_surf_(3.0) {
+      hybrid_grid_map_corner_(10.0),
+      hybrid_grid_map_surf_(10.0) {
   g_is_offline_mode = is_offline_mode;
   // NodeHandle uses reference counting internally,
   // thus a local variable can be created here
@@ -206,25 +206,6 @@ void LaserMapping::Run() {
     gps_fusion_handler_->AddLocalPose(odom_result.timestamp,
                                       pose_map_scan2world_);
 
-#ifdef _SIM_GPS
-    /**
-     * Simulate GPS data for GPS fusion
-     */
-    if (frame_idx_cur_ % 50 == 0) {
-      static std::default_random_engine g;
-      static std::uniform_real_distribution<double> dist(-1.0, 1.0);
-      static Quaternion<double> rotation(
-          Eigen::AngleAxis<double>(dist(g) * M_PI, Eigen::Vector3d::UnitZ()));
-      Rigid3d pose(
-          Vector<double>(1.0, 3.3, 4.2) +
-              0.01 / std::sqrt(3) * Vector<double>(dist(g), dist(g), dist(g)),
-          rotation);
-      gps_fusion_handler_->AddFixedPoint(
-          odom_result.timestamp + std::chrono::milliseconds(int(dist(g) * 50)),
-          pose * pose_map_scan2world_.translation());
-    }
-#endif
-
     PublishScan(odom_result);
 
     tf::Transform transform;
@@ -278,4 +259,21 @@ void LaserMapping::PublishScan(const TimestampedPointCloud &scan) {
   cloud_surf_less_flat_msg.header.stamp = ToRos(scan.timestamp);
   cloud_surf_less_flat_msg.header.frame_id = "/aft_mapped";
   cloud_surf_less_publisher_.publish(cloud_surf_less_flat_msg);
+}
+
+void LaserMapping::AddOdom(const OdometryData &odom_data) {
+#ifdef _SIM_GPS
+  static int counter = 1;
+  /**
+   * Simulate GPS data for GPS fusion
+   */
+  if (counter % 10 == 0) {
+    static std::default_random_engine g;
+    static std::uniform_real_distribution<double> dist(-0.05, 0.05);
+    gps_fusion_handler_->AddFixedPoint(
+        odom_data.timestamp, Vector<double>(dist(g), dist(g), dist(g)) +
+                                 odom_data.odom.translation());
+  }
+  ++counter;
+#endif
 }

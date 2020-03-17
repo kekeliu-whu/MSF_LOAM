@@ -39,4 +39,10 @@ inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
   return cloud_out;
 }
 
+struct OdometryData {
+  Time timestamp;
+  Rigid3d odom;
+  double error;
+};
+
 #endif  // MSF_LOAM_VELODYNE_TIME_STAMPED_POINT_CLOUD_H
