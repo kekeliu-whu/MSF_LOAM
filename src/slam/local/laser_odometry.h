@@ -17,6 +17,8 @@ class LaserOdometry {
 
   void AddImu(const ImuData &imu_data);
 
+  void AddOdom(const OdometryData &odom_data);
+
   std::unique_ptr<Quaternion<double>> AdvanceImuTracker(const Time &time);
 
  private:

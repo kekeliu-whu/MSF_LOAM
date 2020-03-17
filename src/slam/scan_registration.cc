@@ -35,6 +35,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <gflags/gflags.h>
+#include <nav_msgs/Odometry.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -379,12 +380,23 @@ void HandleLaserCloudMessage(
 void HandleImuMessage(
     const sensor_msgs::ImuConstPtr &imu_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
-  laser_odometry_handler->AddImu({
-      FromRos(imu_msg->header.stamp),
-      {imu_msg->linear_acceleration.x, imu_msg->linear_acceleration.y,
-       imu_msg->linear_acceleration.z},
-      {imu_msg->angular_velocity.x, imu_msg->angular_velocity.y,
-       imu_msg->angular_velocity.z}});
+  ImuData imu_data;
+  imu_data.time = FromRos(imu_msg->header.stamp);
+  imu_data.linear_acceleration << imu_msg->linear_acceleration.x,
+      imu_msg->linear_acceleration.y, imu_msg->linear_acceleration.z;
+  imu_data.angular_velocity << imu_msg->angular_velocity.x,
+      imu_msg->angular_velocity.y, imu_msg->angular_velocity.z;
+  laser_odometry_handler->AddImu(imu_data);
+}
+
+void HandleOdomMessage(
+    const nav_msgs::OdometryConstPtr &odom_msg,
+    const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
+  OdometryData odom_data;
+  odom_data.timestamp = FromRos(odom_msg->header.stamp);
+  odom_data.odom = FromRos(odom_msg->pose);
+  odom_data.error = 0;
+  laser_odometry_handler->AddOdom(odom_data);
 }
 
 int main(int argc, char **argv) {
@@ -398,8 +410,8 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
 
-  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 16))
-      << "Use default scan_line: 16";
+  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 64))
+      << "Use default scan_line: 64";
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
       << "Use default minimum_range: 0.3";
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
@@ -419,8 +431,11 @@ int main(int argc, char **argv) {
         HandleLaserCloudMessage(m.instantiate<sensor_msgs::PointCloud2>(),
                                 laser_odometry_handler);
       } else if (m.isType<sensor_msgs::Imu>()) {
-//        HandleImuMessage(m.instantiate<sensor_msgs::Imu>(),
-//                         laser_odometry_handler);
+        HandleImuMessage(m.instantiate<sensor_msgs::Imu>(),
+                         laser_odometry_handler);
+      } else if (m.isType<nav_msgs::Odometry>()) {
+        HandleOdomMessage(m.instantiate<nav_msgs::Odometry>(),
+                          laser_odometry_handler);
       }
     }
     bag.close();
@@ -434,6 +449,9 @@ int main(int argc, char **argv) {
     ros::Subscriber subImu = nh.subscribe<sensor_msgs::Imu>(
         "/imu", 10,
         boost::bind(HandleImuMessage, _1, boost::ref(laser_odometry_handler)));
+    ros::Subscriber subOdom = nh.subscribe<nav_msgs::Odometry>(
+        "/odometry_gt", 10,
+        boost::bind(HandleOdomMessage, _1, boost::ref(laser_odometry_handler)));
     ros::spin();
   }
 
