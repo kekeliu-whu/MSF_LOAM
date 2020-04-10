@@ -300,6 +300,16 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     LOG_STEP_TIME("ODO", "Solver time", t_solver.toc());
+    // if (opti_counter == 0) {
+    //   LOG(INFO) << "Odometry match start error: "
+    //             << std::sqrt(2 * summary.initial_cost /
+    //                          (corner_correspondence + plane_correspondence));
+    // }
+    // if (opti_counter == 1) {
+    //   LOG(INFO) << "Odometry match final error: "
+    //             << std::sqrt(2 * summary.final_cost /
+    //                          (corner_correspondence + plane_correspondence));
+    // }
   }
   LOG_STEP_TIME("ODO", "Optimization twice", t_opt.toc());
 
