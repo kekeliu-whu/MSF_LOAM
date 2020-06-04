@@ -25,16 +25,25 @@ void GpsFusion::AddLocalPose(const Time& time, const Rigid3d& pose) {
 }
 
 void GpsFusion::Optimize() {
+  if (fixed_points_.size() < 2) {
+    LOG(WARNING) << "Number of fixed points less than 2!";
+    return;
+  }
   CHECK_GT(local_poses_.size(), 2);
-  CHECK_GT(fixed_points_.size(), 2);
   CHECK_LE(local_poses_.front().timestamp, fixed_points_.front().timestamp);
   CHECK_LE(fixed_points_.back().timestamp, local_poses_.back().timestamp);
+
+  for (auto& local_pose : local_poses_) {
+    LOG(INFO) << "local pose before gps: " << local_pose.timestamp << " "
+              << local_pose.pose.translation().transpose();
+  }
 
   ceres::Problem problem;
   ceres::Solver::Options options;
   options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
-  options.minimizer_progress_to_stdout = true;
+  options.minimizer_progress_to_stdout = false;
   options.max_num_iterations = 10;
+  options.num_threads = 4;
   ceres::Solver::Summary summary;
   ceres::LossFunction* loss_function = new ceres::HuberLoss(1.0);
   ceres::LocalParameterization* local_parameterization =
@@ -71,11 +80,6 @@ void GpsFusion::Optimize() {
                              local_pose_i.pose.translation().data(),
                              local_pose_j.pose.rotation().coeffs().data(),
                              local_pose_j.pose.translation().data());
-  }
-
-  for (auto& local_pose : local_poses_) {
-    LOG(INFO) << "local pose before gps: " << local_pose.timestamp << " "
-              << local_pose.pose.translation().transpose();
   }
 
   ceres::Solve(options, &problem, &summary);

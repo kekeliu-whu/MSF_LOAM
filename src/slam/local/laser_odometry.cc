@@ -86,8 +86,8 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
 
   // publish odometry
   nav_msgs::Odometry laserOdometry;
-  laserOdometry.header.frame_id = "/camera_init";
-  laserOdometry.child_frame_id = "/laser_odom";
+  laserOdometry.header.frame_id = "camera_init";
+  laserOdometry.child_frame_id = "laser_odom";
   laserOdometry.header.stamp = ToRos(scan_curr.timestamp);
   laserOdometry.pose = ToRos(pose_scan2world_);
   laser_odom_publisher_.publish(laserOdometry);
@@ -97,7 +97,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   laserPose.pose = laserOdometry.pose.pose;
   laser_path_.header.stamp = laserOdometry.header.stamp;
   laser_path_.poses.push_back(laserPose);
-  laser_path_.header.frame_id = "/camera_init";
+  laser_path_.header.frame_id = "camera_init";
   laser_path_publisher_.publish(laser_path_);
 
   scan_curr.odom_pose = pose_scan2world_;
@@ -111,7 +111,6 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
 }
 
 void LaserOdometry::AddImu(const ImuData &imu_data) {
-  // todo
   // estimate rotation_delta
   if (!imu_tracker_) {
     LOG(INFO) << "Initializing imu tracker ...";

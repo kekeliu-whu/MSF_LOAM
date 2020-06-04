@@ -64,6 +64,7 @@ namespace {
 
 enum PointLabel { P_UNKNOWN = 0, P_LESS_SHARP = 1, P_SHARP = 2, P_FLAT = -1 };
 
+const int kDefaultScanNum = 16;
 const double kScanPeriod = 0.1;  // 扫描周期
 double g_min_range;              // 最小扫描距离
 int g_scan_num;                  // 扫描线数
@@ -81,22 +82,18 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
                                 double min_range) {
   if (&cloud_in != &cloud_out) {
     cloud_out.header = cloud_in.header;
-    cloud_out.points.resize(cloud_in.points.size());
+    cloud_out.resize(cloud_in.size());
   }
 
   size_t j = 0;
 
-  for (size_t i = 0; i < cloud_in.points.size(); ++i) {
-    if (cloud_in.points[i].x * cloud_in.points[i].x +
-            cloud_in.points[i].y * cloud_in.points[i].y +
-            cloud_in.points[i].z * cloud_in.points[i].z <
-        min_range * min_range)
-      continue;
-    cloud_out.points[j] = cloud_in.points[i];
+  for (size_t i = 0; i < cloud_in.size(); ++i) {
+    if (cloud_in[i].getVector3fMap().norm() < min_range) continue;
+    cloud_out[j] = cloud_in[i];
     j++;
   }
-  if (j != cloud_in.points.size()) {
-    cloud_out.points.resize(j);
+  if (j != cloud_in.size()) {
+    cloud_out.resize(j);
   }
 
   cloud_out.height = 1;
@@ -112,7 +109,7 @@ void HandleLaserCloudMessage(
   std::vector<int> scan_start_indices(g_scan_num, 0);
   std::vector<int> scan_end_indices(g_scan_num, 0);
 
-  pcl::PointCloud<pcl::PointXYZ> laser_cloud_in;
+  pcl::PointCloud<PointType> laser_cloud_in;
   pcl::fromROSMsg(*laser_cloud_msg, laser_cloud_in);
 
   // 删除非法点
@@ -120,12 +117,11 @@ void HandleLaserCloudMessage(
   pcl::removeNaNFromPointCloud(laser_cloud_in, laser_cloud_in, indices);
   RemoveClosePointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
-  int cloudSize = laser_cloud_in.points.size();
-  double startOri =
-      -atan2(laser_cloud_in.points[0].y, laser_cloud_in.points[0].x);
-  double endOri = -atan2(laser_cloud_in.points[cloudSize - 1].y,
-                         laser_cloud_in.points[cloudSize - 1].x) +
-                  2 * M_PI;
+  int cloudSize = laser_cloud_in.size();
+  double startOri = -atan2(laser_cloud_in[0].y, laser_cloud_in[0].x);
+  double endOri =
+      -atan2(laser_cloud_in[cloudSize - 1].y, laser_cloud_in[cloudSize - 1].x) +
+      2 * M_PI;
 
   if (endOri - startOri > 3 * M_PI) {
     endOri -= 2 * M_PI;
@@ -138,9 +134,7 @@ void HandleLaserCloudMessage(
   PointType point;
   std::vector<PointCloud> laserCloudScans(g_scan_num);
   for (int i = 0; i < cloudSize; i++) {
-    point.x = laser_cloud_in.points[i].x;
-    point.y = laser_cloud_in.points[i].y;
-    point.z = laser_cloud_in.points[i].z;
+    point = laser_cloud_in[i];
 
     // 计算scan_id
     double angle = atan(point.z / sqrt(point.x * point.x + point.y * point.y)) *
@@ -410,8 +404,8 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
 
-  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, 64))
-      << "Use default scan_line: 64";
+  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, kDefaultScanNum))
+      << "Use default scan_line: " << kDefaultScanNum;
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
       << "Use default minimum_range: 0.3";
   CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)

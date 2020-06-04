@@ -105,28 +105,22 @@ bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
                   .cast<double>();
         }
         // 平面到原点的垂直向量
+        // 原理：平面ax+by+cz+D=0的法向量是(a,b,c)
         Eigen::Vector3d norm = matA0.colPivHouseholderQr().solve(matB0);
-        // 平面到原点的垂直距离
-        double negative_OA_dot_norm = 1 / norm.norm();
         norm.normalize();
+        Eigen::Vector3d center = matA0.colwise().mean();
 
-        // Here n(pa, pb, pc) is unit norm of plane
         bool planeValid = true;
         for (int j = 0; j < 5; j++) {
-          // if OX * n > 0.2, then plane is not fit well
-          if (fabs(norm.dot(
-                       cloud_map.cloud_surf_less_flat->points[pointSearchInd[j]]
-                           .getVector3fMap()
-                           .cast<double>()) +
-                   negative_OA_dot_norm) > 0.2) {
+          if (std::abs(norm.dot(matA0.row(j).transpose() - center)) > 0.2) {
             planeValid = false;
             break;
           }
         }
         Eigen::Vector3d curr_point(pointOri.x, pointOri.y, pointOri.z);
         if (planeValid) {
-          ceres::CostFunction *cost_function = LidarPlaneNormFactor::Create(
-              curr_point, norm, negative_OA_dot_norm);
+          ceres::CostFunction *cost_function =
+              LidarPlaneFactor::Create(curr_point, center, norm);
           problem.AddResidualBlock(
               cost_function, loss_function,
               pose_estimate_map_scan2world->rotation().coeffs().data(),

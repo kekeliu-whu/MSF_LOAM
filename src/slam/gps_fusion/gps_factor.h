@@ -34,7 +34,6 @@ struct RelativePoseFactor {
                      double sr, double st)
       : pose_gps_ij_(pose_gps_i.inverse() * pose_gps_j), sr_(sr), st_(st) {}
 
-  // TODO
   template <typename T>
   bool operator()(const T *r_i, const T *t_i, const T *r_j, const T *t_j,
                   T *residual) const {

@@ -48,11 +48,11 @@ int main(int argc, char** argv) {
   publish_delay = publish_delay <= 0 ? 1 : publish_delay;
 
   nav_msgs::Odometry odomGT;
-  odomGT.header.frame_id = "/camera_init";
-  odomGT.child_frame_id = "/ground_truth";
+  odomGT.header.frame_id = "camera_init";
+  odomGT.child_frame_id = "ground_truth";
 
   nav_msgs::Path pathGT;
-  pathGT.header.frame_id = "/camera_init";
+  pathGT.header.frame_id = "camera_init";
 
   std::string timestamp_path = "sequences/" + sequence_number + "/times.txt";
   std::ifstream timestamp_file(dataset_folder + timestamp_path,
@@ -115,7 +115,6 @@ int main(int argc, char** argv) {
       Tc.translation() = gt_pose.topRightCorner<3, 1>();
     }
 
-    // todo
     Rigid3d Tl = Tr.inverse() * Tc * Tr;
     Tl.rotation().normalize();
 
@@ -156,7 +155,7 @@ int main(int argc, char** argv) {
     sensor_msgs::PointCloud2 laser_cloud_msg;
     pcl::toROSMsg(laser_cloud, laser_cloud_msg);
     laser_cloud_msg.header.stamp = ros::Time().fromSec(timestamp);
-    laser_cloud_msg.header.frame_id = "/camera_init";
+    laser_cloud_msg.header.frame_id = "camera_init";
 
     if (to_bag) {
       bag_out.write("/velodyne_points", ros::Time::now(), laser_cloud_msg);
