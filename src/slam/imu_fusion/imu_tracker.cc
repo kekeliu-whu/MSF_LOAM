@@ -50,7 +50,8 @@ ImuTracker::ImuTracker(const double imu_gravity_time_constant, const Time time)
       imu_angular_velocity_(Eigen::Vector3d::Zero()) {}
 
 void ImuTracker::Advance(const Time time) {
-  CHECK_LE(time_, time);
+  LOG_IF(ERROR, time_ > time)
+      << "Imu tracker not advanced: " << time_ << ">" << time;
   const double delta_t = ToSeconds(time - time_);
   const Eigen::Quaterniond rotation = AngleAxisVectorToRotationQuaternion(
       Eigen::Vector3d(imu_angular_velocity_ * delta_t));
