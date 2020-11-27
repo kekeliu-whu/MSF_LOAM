@@ -28,9 +28,18 @@ Clone the repository and catkin_make.
 Download [NSH indoor outdoor](https://drive.google.com/file/d/1s05tBQOLNEDDurlg48KiUWxCp-YqYyGH/view) to YOUR_DATASET_FOLDER. 
 
 ```
-    roslaunch msf_loam_velodyne msf_loam_velodyne_VLP_16.launch
-    rosbag play YOUR_DATASET_FOLDER/nsh_indoor_outdoor.bag
+roslaunch msf_loam_velodyne msf_loam_velodyne_VLP_16.launch
+rosbag play YOUR_DATASET_FOLDER/nsh_indoor_outdoor.bag
 ```
 
 ## 4.Acknowledgements
 Thanks for LOAM(J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time) and [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM).
+
+## 5. TODO
+For some reasons, this repo will be massively updated, aiming to add features as following:
+* IMU intrinsic and extrinsic paramerter estimation
+* IMU LiDAR fusion localization (tightly-coupled)
+* LiDAR scan undistortion
+* Online temporal calibration for system
+
+> Attension: All the above progress will be display in `Github Project`.
