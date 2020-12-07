@@ -6,7 +6,7 @@
 
 template <typename T>
 bool LidarEdgeFactor::operator()(const T *q, const T *t, T *residual) const {
-  Eigen::Matrix<T, 3, 1> cp = curr_point_.cast<T>();
+  Eigen::Matrix<T, 3, 1> cp  = curr_point_.cast<T>();
   Eigen::Matrix<T, 3, 1> lpa = last_point_a_.cast<T>();
   Eigen::Matrix<T, 3, 1> lpb = last_point_b_.cast<T>();
 
@@ -43,7 +43,7 @@ ceres::CostFunction *LidarEdgeFactor::Create(
 
 template <typename T>
 bool LidarPlaneFactor::operator()(const T *q, const T *t, T *residual) const {
-  Eigen::Matrix<T, 3, 1> cp = curr_point_.cast<T>();
+  Eigen::Matrix<T, 3, 1> cp  = curr_point_.cast<T>();
   Eigen::Matrix<T, 3, 1> lpi = last_plane_C_.cast<T>();
   Eigen::Matrix<T, 3, 1> ijk = last_plane_N_.cast<T>();
 

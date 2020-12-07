@@ -40,7 +40,7 @@ struct RelativePoseFactor {
     // Use {} instead of () to avoid be treated as a function declaration
     Rigid3<T> pose_i{Vector<T>(t_i), Quaternion<T>(r_i)};
     Rigid3<T> pose_j{Vector<T>(t_j), Quaternion<T>(r_j)};
-    Rigid3<T> pose_ij = pose_i.inverse() * pose_j;
+    Rigid3<T> pose_ij       = pose_i.inverse() * pose_j;
     Rigid3<T> pose_residual = pose_ij.inverse() * pose_gps_ij_.cast<T>();
     Eigen::Map<Vector<T>>{residual} = pose_residual.translation() / T(st_);
     Eigen::Map<Vector<T>>{residual + 3} =

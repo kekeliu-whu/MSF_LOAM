@@ -26,13 +26,13 @@ namespace {
 template <typename T>
 Eigen::Quaternion<T> AngleAxisVectorToRotationQuaternion(
     const Eigen::Matrix<T, 3, 1>& angle_axis) {
-  T scale = T(0.5);
-  T w = T(1.);
+  T scale                       = T(0.5);
+  T w                           = T(1.);
   constexpr double kCutoffAngle = 1e-8;  // We linearize below this angle.
   if (angle_axis.squaredNorm() > kCutoffAngle) {
     const T norm = angle_axis.norm();
-    scale = sin(norm / 2.) / norm;
-    w = cos(norm / 2.);
+    scale        = sin(norm / 2.) / norm;
+    w            = cos(norm / 2.);
   }
   const Eigen::Matrix<T, 3, 1> quaternion_xyz = scale * angle_axis;
   return Eigen::Quaternion<T>(w, quaternion_xyz.x(), quaternion_xyz.y(),
@@ -52,12 +52,12 @@ ImuTracker::ImuTracker(const double imu_gravity_time_constant, const Time time)
 void ImuTracker::Advance(const Time time) {
   LOG_IF(ERROR, time_ > time)
       << "Imu tracker not advanced: " << time_ << ">" << time;
-  const double delta_t = ToSeconds(time - time_);
+  const double delta_t              = ToSeconds(time - time_);
   const Eigen::Quaterniond rotation = AngleAxisVectorToRotationQuaternion(
       Eigen::Vector3d(imu_angular_velocity_ * delta_t));
-  orientation_ = (orientation_ * rotation).normalized();
+  orientation_    = (orientation_ * rotation).normalized();
   gravity_vector_ = rotation.conjugate() * gravity_vector_;
-  time_ = time;
+  time_           = time;
 }
 
 void ImuTracker::AddImuObservation(const ImuData& imu_data) {

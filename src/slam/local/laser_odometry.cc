@@ -88,14 +88,14 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   // publish odometry
   nav_msgs::Odometry laserOdometry;
   laserOdometry.header.frame_id = "camera_init";
-  laserOdometry.child_frame_id = "laser_odom";
-  laserOdometry.header.stamp = ToRos(scan_curr.timestamp);
-  laserOdometry.pose = ToRos(pose_scan2world_);
+  laserOdometry.child_frame_id  = "laser_odom";
+  laserOdometry.header.stamp    = ToRos(scan_curr.timestamp);
+  laserOdometry.pose            = ToRos(pose_scan2world_);
   laser_odom_publisher_.publish(laserOdometry);
 
   geometry_msgs::PoseStamped laserPose;
-  laserPose.header = laserOdometry.header;
-  laserPose.pose = laserOdometry.pose.pose;
+  laserPose.header         = laserOdometry.header;
+  laserPose.pose           = laserOdometry.pose.pose;
   laser_path_.header.stamp = laserOdometry.header.stamp;
   laser_path_.poses.push_back(laserPose);
   laser_path_.header.frame_id = "camera_init";

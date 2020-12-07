@@ -35,7 +35,7 @@ inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
   PointCloudPtr cloud_out(new PointCloud);
   cloud_out->resize(cloud_in->size());
   for (size_t i = 0; i < cloud_in->size(); ++i)
-    (*cloud_out)[i] = pose * (*cloud_in)[i];
+    cloud_out->at(i) = pose * cloud_in->at(i);
   return cloud_out;
 }
 

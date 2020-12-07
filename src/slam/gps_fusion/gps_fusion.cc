@@ -40,10 +40,10 @@ void GpsFusion::Optimize() {
 
   ceres::Problem problem;
   ceres::Solver::Options options;
-  options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
+  options.linear_solver_type           = ceres::SPARSE_NORMAL_CHOLESKY;
   options.minimizer_progress_to_stdout = false;
-  options.max_num_iterations = 10;
-  options.num_threads = 4;
+  options.max_num_iterations           = 10;
+  options.num_threads                  = 4;
   ceres::Solver::Summary summary;
   ceres::LossFunction* loss_function = new ceres::HuberLoss(1.0);
   ceres::LocalParameterization* local_parameterization =

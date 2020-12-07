@@ -65,9 +65,9 @@ namespace {
 enum PointLabel { P_UNKNOWN = 0, P_LESS_SHARP = 1, P_SHARP = 2, P_FLAT = -1 };
 
 const int kDefaultScanNum = 16;
-const double kScanPeriod = 0.1;  // 扫描周期
-double g_min_range;              // 最小扫描距离
-int g_scan_num;                  // 扫描线数
+const double kScanPeriod  = 0.1;  // 扫描周期
+double g_min_range;               // 最小扫描距离
+int g_scan_num;                   // 扫描线数
 
 std::vector<float> g_cloud_curvatures(400000);    // 点的曲率
 std::vector<int> g_cloud_sorted_indices(400000);  // 通过曲率对点排序
@@ -96,8 +96,8 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
     cloud_out.resize(j);
   }
 
-  cloud_out.height = 1;
-  cloud_out.width = static_cast<uint32_t>(j);
+  cloud_out.height   = 1;
+  cloud_out.width    = static_cast<uint32_t>(j);
   cloud_out.is_dense = true;
 }
 
@@ -117,7 +117,7 @@ void HandleLaserCloudMessage(
   pcl::removeNaNFromPointCloud(laser_cloud_in, laser_cloud_in, indices);
   RemoveClosePointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
-  int cloudSize = laser_cloud_in.size();
+  int cloudSize   = laser_cloud_in.size();
   double startOri = -atan2(laser_cloud_in[0].y, laser_cloud_in[0].x);
   double endOri =
       -atan2(laser_cloud_in[cloudSize - 1].y, laser_cloud_in[cloudSize - 1].x) +
@@ -130,7 +130,7 @@ void HandleLaserCloudMessage(
   }
 
   bool halfPassed = false;
-  int count = cloudSize;
+  int count       = cloudSize;
   PointType point;
   std::vector<PointCloud> laserCloudScans(g_scan_num);
   for (int i = 0; i < cloudSize; i++) {
@@ -189,7 +189,7 @@ void HandleLaserCloudMessage(
     }
 
     // 密度的整数部分为scan_id，浮点部分为点在当前帧的时间偏移
-    double relTime = (ori - startOri) / (endOri - startOri);
+    double relTime  = (ori - startOri) / (endOri - startOri);
     point.intensity = scanID + kScanPeriod * relTime;
     laserCloudScans[scanID].push_back(point);
   }
@@ -238,10 +238,10 @@ void HandleLaserCloudMessage(
                    laser_cloud->points[i + 3].z + laser_cloud->points[i + 4].z +
                    laser_cloud->points[i + 5].z;
 
-    g_cloud_curvatures[i] = diffX * diffX + diffY * diffY + diffZ * diffZ;
+    g_cloud_curvatures[i]     = diffX * diffX + diffY * diffY + diffZ * diffZ;
     g_cloud_sorted_indices[i] = i;
     g_is_cloud_neighbor_picked[i] = false;
-    g_cloud_labels[i] = P_UNKNOWN;
+    g_cloud_labels[i]             = P_UNKNOWN;
   }
 
   TicToc t_pts;
@@ -358,12 +358,12 @@ void HandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Seperate points", t_pts.toc());
 
   TimestampedPointCloud scan;
-  scan.timestamp = FromRos(laser_cloud_msg->header.stamp);
-  scan.cloud_full_res = laser_cloud;
-  scan.cloud_surf_less_flat = cloud_surf_less_flat;
-  scan.cloud_surf_flat = cloud_surf_flat;
+  scan.timestamp               = FromRos(laser_cloud_msg->header.stamp);
+  scan.cloud_full_res          = laser_cloud;
+  scan.cloud_surf_less_flat    = cloud_surf_less_flat;
+  scan.cloud_surf_flat         = cloud_surf_flat;
   scan.cloud_corner_less_sharp = cloud_corner_less_sharp;
-  scan.cloud_corner_sharp = cloud_corner_sharp;
+  scan.cloud_corner_sharp      = cloud_corner_sharp;
   laser_odometry_handler->AddLaserScan(scan);
 
   LOG_STEP_TIME("REG", "Scan registration", t_whole.toc());
@@ -388,14 +388,14 @@ void HandleOdomMessage(
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   OdometryData odom_data;
   odom_data.timestamp = FromRos(odom_msg->header.stamp);
-  odom_data.odom = FromRos(odom_msg->pose);
-  odom_data.error = 0;
+  odom_data.odom      = FromRos(odom_msg->pose);
+  odom_data.error     = 0;
   laser_odometry_handler->AddOdom(odom_data);
 }
 
 int main(int argc, char **argv) {
   // Set glog and gflags
-  FLAGS_alsologtostderr = true;
+  FLAGS_alsologtostderr  = true;
   FLAGS_colorlogtostderr = true;
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
