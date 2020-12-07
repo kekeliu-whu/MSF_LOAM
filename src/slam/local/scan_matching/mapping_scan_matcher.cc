@@ -65,7 +65,7 @@ bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
                   .cast<double>();
         }
         Eigen::Vector3d center = matA0.rowwise().mean();
-        matA0 = matA0.colwise() - center;
+        matA0                  = matA0.colwise() - center;
         Eigen::Matrix3d covMat = matA0 * matA0.transpose();
 
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> saes(covMat);
@@ -138,7 +138,7 @@ bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
 
     TicToc t_solver;
     ceres::Solver::Options options;
-    options.max_num_iterations = 6;
+    options.max_num_iterations           = 6;
     options.minimizer_progress_to_stdout = false;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);

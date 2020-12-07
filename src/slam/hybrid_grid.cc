@@ -393,7 +393,7 @@ class DynamicGrid {
       }
     }
     meta_cells_ = std::move(new_meta_cells_);
-    bits_ = new_bits;
+    bits_       = new_bits;
   }
 
   int bits_;

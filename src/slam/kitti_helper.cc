@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
 
   nav_msgs::Odometry odomGT;
   odomGT.header.frame_id = "camera_init";
-  odomGT.child_frame_id = "ground_truth";
+  odomGT.child_frame_id  = "ground_truth";
 
   nav_msgs::Path pathGT;
   pathGT.header.frame_id = "camera_init";
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
         gt_pose(i, j) = stof(s);
       }
     }
-    Tr.rotation() = gt_pose.topLeftCorner<3, 3>();
+    Tr.rotation()    = gt_pose.topLeftCorner<3, 3>();
     Tr.translation() = gt_pose.topRightCorner<3, 1>();
   }
 
@@ -111,25 +111,25 @@ int main(int argc, char** argv) {
           gt_pose(i, j) = stof(s);
         }
       }
-      Tc.rotation() = gt_pose.topLeftCorner<3, 3>();
+      Tc.rotation()    = gt_pose.topLeftCorner<3, 3>();
       Tc.translation() = gt_pose.topRightCorner<3, 1>();
     }
 
     Rigid3d Tl = Tr.inverse() * Tc * Tr;
     Tl.rotation().normalize();
 
-    odomGT.header.stamp = ros::Time().fromSec(timestamp);
+    odomGT.header.stamp            = ros::Time().fromSec(timestamp);
     odomGT.pose.pose.orientation.x = Tl.rotation().x();
     odomGT.pose.pose.orientation.y = Tl.rotation().y();
     odomGT.pose.pose.orientation.z = Tl.rotation().z();
     odomGT.pose.pose.orientation.w = Tl.rotation().w();
-    odomGT.pose.pose.position.x = Tl.translation().x();
-    odomGT.pose.pose.position.y = Tl.translation().y();
-    odomGT.pose.pose.position.z = Tl.translation().z();
+    odomGT.pose.pose.position.x    = Tl.translation().x();
+    odomGT.pose.pose.position.y    = Tl.translation().y();
+    odomGT.pose.pose.position.z    = Tl.translation().z();
 
     geometry_msgs::PoseStamped poseGT;
-    poseGT.header = odomGT.header;
-    poseGT.pose = odomGT.pose.pose;
+    poseGT.header       = odomGT.header;
+    poseGT.pose         = odomGT.pose.pose;
     pathGT.header.stamp = odomGT.header.stamp;
     pathGT.poses.push_back(poseGT);
 
@@ -145,16 +145,16 @@ int main(int argc, char** argv) {
     pcl::PointCloud<pcl::PointXYZI> laser_cloud;
     for (std::size_t i = 0; i < lidar_data.size(); i += 4) {
       pcl::PointXYZI point;
-      point.x = lidar_data[i];
-      point.y = lidar_data[i + 1];
-      point.z = lidar_data[i + 2];
+      point.x         = lidar_data[i];
+      point.y         = lidar_data[i + 1];
+      point.z         = lidar_data[i + 2];
       point.intensity = lidar_data[i + 3];
       laser_cloud.push_back(point);
     }
 
     sensor_msgs::PointCloud2 laser_cloud_msg;
     pcl::toROSMsg(laser_cloud, laser_cloud_msg);
-    laser_cloud_msg.header.stamp = ros::Time().fromSec(timestamp);
+    laser_cloud_msg.header.stamp    = ros::Time().fromSec(timestamp);
     laser_cloud_msg.header.frame_id = "camera_init";
 
     if (to_bag) {

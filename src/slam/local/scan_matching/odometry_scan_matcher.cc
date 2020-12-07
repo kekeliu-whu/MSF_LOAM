@@ -10,10 +10,10 @@
 
 namespace {
 
-constexpr double kScanPeriod = 0.1;
+constexpr double kScanPeriod          = 0.1;
 constexpr double kDistanceSqThreshold = 25;
-constexpr double kNearByScan = 2.5;
-constexpr int kOptimalNum = 2;
+constexpr double kNearByScan          = 2.5;
+constexpr int kOptimalNum             = 2;
 
 // undistort lidar point
 void TransformToStart(const PointType &pi, PointType &po,
@@ -30,9 +30,9 @@ void TransformToStart(const PointType &pi, PointType &po,
   Eigen::Vector3d point(pi.x, pi.y, pi.z);
   Eigen::Vector3d un_point = q_point_last * point + t_point_last;
 
-  po.x = un_point.x();
-  po.y = un_point.y();
-  po.z = un_point.z();
+  po.x         = un_point.x();
+  po.y         = un_point.y();
+  po.z         = un_point.z();
   po.intensity = pi.intensity;
 }
 
@@ -44,10 +44,10 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
   PointCloudConstPtr cloud_corner_sharp = scan_curr.cloud_corner_sharp;
   PointCloudConstPtr cloud_corner_less_sharp =
       scan_curr.cloud_corner_less_sharp;
-  PointCloudConstPtr cloud_surf_flat = scan_curr.cloud_surf_flat;
+  PointCloudConstPtr cloud_surf_flat      = scan_curr.cloud_surf_flat;
   PointCloudConstPtr cloud_surf_less_flat = scan_curr.cloud_surf_less_flat;
-  PointCloudConstPtr cloud_corner_last = scan_last.cloud_corner_less_sharp;
-  PointCloudConstPtr cloud_surf_last = scan_last.cloud_surf_less_flat;
+  PointCloudConstPtr cloud_corner_last    = scan_last.cloud_corner_less_sharp;
+  PointCloudConstPtr cloud_surf_last      = scan_last.cloud_surf_less_flat;
 
   TicToc t_opt;
 
@@ -118,7 +118,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
           if (pointSqDis < minPointSqDis2) {
             // find nearer point
             minPointSqDis2 = pointSqDis;
-            minPointInd2 = j;
+            minPointInd2   = j;
           }
         }
 
@@ -144,7 +144,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
           if (pointSqDis < minPointSqDis2) {
             // find nearer point
             minPointSqDis2 = pointSqDis;
-            minPointInd2 = j;
+            minPointInd2   = j;
           }
         }
       }
@@ -213,14 +213,14 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
           if (int(cloud_surf_last->points[j].intensity) <= closestPointScanID &&
               pointSqDis < minPointSqDis2) {
             minPointSqDis2 = pointSqDis;
-            minPointInd2 = j;
+            minPointInd2   = j;
           }
           // if in the higher scan line
           else if (int(cloud_surf_last->points[j].intensity) >
                        closestPointScanID &&
                    pointSqDis < minPointSqDis3) {
             minPointSqDis3 = pointSqDis;
-            minPointInd3 = j;
+            minPointInd3   = j;
           }
         }
 
@@ -242,13 +242,13 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
           if (int(cloud_surf_last->points[j].intensity) >= closestPointScanID &&
               pointSqDis < minPointSqDis2) {
             minPointSqDis2 = pointSqDis;
-            minPointInd2 = j;
+            minPointInd2   = j;
           } else if (int(cloud_surf_last->points[j].intensity) <
                          closestPointScanID &&
                      pointSqDis < minPointSqDis3) {
             // find nearer point
             minPointSqDis3 = pointSqDis;
-            minPointInd3 = j;
+            minPointInd3   = j;
           }
         }
 
@@ -296,7 +296,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
 
     TicToc t_solver;
     ceres::Solver::Options options;
-    options.max_num_iterations = 6;
+    options.max_num_iterations           = 6;
     options.minimizer_progress_to_stdout = false;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
