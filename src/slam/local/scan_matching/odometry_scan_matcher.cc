@@ -1,5 +1,7 @@
 #include <ceres/ceres.h>
 #include <pcl/kdtree/kdtree_flann.h>
+#include <sstream>
+#include <string>
 
 #include "common/common.h"
 #include "common/tic_toc.h"
@@ -11,6 +13,7 @@ namespace {
 constexpr double kScanPeriod = 0.1;
 constexpr double kDistanceSqThreshold = 25;
 constexpr double kNearByScan = 2.5;
+constexpr int kOptimalNum = 2;
 
 // undistort lidar point
 void TransformToStart(const PointType &pi, PointType &po,
@@ -59,10 +62,9 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
   kdtree_surf_last->setInputCloud(cloud_surf_last);
   LOG_STEP_TIME("ODO", "Build kdtree", t_kdtree.toc());
 
-  for (size_t opti_counter = 0; opti_counter < 2; ++opti_counter) {
+  for (size_t opti_counter = 0; opti_counter < kOptimalNum; ++opti_counter) {
     int corner_correspondence = 0, plane_correspondence = 0;
 
-    // ceres::LossFunction *loss_function = NULL;
     ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
     ceres::LocalParameterization *q_parameterization =
         new ceres::EigenQuaternionParameterization();
@@ -294,22 +296,14 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
 
     TicToc t_solver;
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_QR;
-    options.max_num_iterations = 4;
+    options.max_num_iterations = 6;
     options.minimizer_progress_to_stdout = false;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
+    if (opti_counter == kOptimalNum - 1) {
+      this->RefinePoseByRejectOutliers(problem);
+    }
     LOG_STEP_TIME("ODO", "Solver time", t_solver.toc());
-    // if (opti_counter == 0) {
-    //   LOG(INFO) << "Odometry match start error: "
-    //             << std::sqrt(2 * summary.initial_cost /
-    //                          (corner_correspondence + plane_correspondence));
-    // }
-    // if (opti_counter == 1) {
-    //   LOG(INFO) << "Odometry match final error: "
-    //             << std::sqrt(2 * summary.final_cost /
-    //                          (corner_correspondence + plane_correspondence));
-    // }
   }
   LOG_STEP_TIME("ODO", "Optimization twice", t_opt.toc());
 

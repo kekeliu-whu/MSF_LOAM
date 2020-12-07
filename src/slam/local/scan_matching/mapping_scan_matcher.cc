@@ -8,6 +8,10 @@
 #include "lidar_factor.h"
 #include "mapping_scan_matcher.h"
 
+namespace {
+constexpr int kOptimalNum = 2;
+}
+
 bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
                                const TimestampedPointCloud &scan_curr,
                                Rigid3d *pose_estimate_map_scan2world) {
@@ -23,7 +27,7 @@ bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
   kdtreeSurfFromMap->setInputCloud(cloud_map.cloud_surf_less_flat);
   LOG_STEP_TIME("MAP", "build tree", t_tree.toc());
 
-  for (int iterCount = 0; iterCount < 2; iterCount++) {
+  for (int iterCount = 0; iterCount < kOptimalNum; iterCount++) {
     // ceres::LossFunction *loss_function = NULL;
     ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
     ceres::LocalParameterization *q_parameterization =
@@ -134,13 +138,13 @@ bool MappingScanMatcher::Match(const TimestampedPointCloud &cloud_map,
 
     TicToc t_solver;
     ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_QR;
-    options.max_num_iterations = 4;
+    options.max_num_iterations = 6;
     options.minimizer_progress_to_stdout = false;
-    options.check_gradients = false;
-    options.gradient_check_relative_precision = 1e-4;
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
+    if (iterCount == kOptimalNum - 1) {
+      this->RefinePoseByRejectOutliers(problem);
+    }
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
   }
   LOG_STEP_TIME("MAP", "Optimization twice", t_opt.toc());
