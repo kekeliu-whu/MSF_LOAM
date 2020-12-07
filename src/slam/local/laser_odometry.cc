@@ -52,7 +52,8 @@
 #include "slam/local/scan_matching/odometry_scan_matcher.h"
 
 LaserOdometry::LaserOdometry(bool is_offline_mode)
-    : laser_mapper_handler_(std::make_shared<LaserMapping>(is_offline_mode)) {
+    : laser_mapper_handler_(std::make_shared<LaserMapping>(is_offline_mode)),
+      scan_matcher_(std::make_unique<OdometryScanMatcher>()) {
   // NodeHandle uses reference counting internally,
   // thus a local variable can be created here
   ros::NodeHandle nh;
@@ -77,7 +78,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   } else {
     // pose_curr2last_.rotation() =
     // scan_last_.imu_rotation * scan_curr.imu_rotation.inverse();
-    OdometryScanMatcher::Match(scan_last_, scan_curr, &pose_curr2last_);
+    scan_matcher_->Match(scan_last_, scan_curr, &pose_curr2last_);
 
     LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
     LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;

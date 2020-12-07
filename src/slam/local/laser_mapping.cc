@@ -19,6 +19,7 @@ bool g_should_exit = false;
 
 LaserMapping::LaserMapping(bool is_offline_mode)
     : gps_fusion_handler_(std::make_shared<GpsFusion>()),
+      scan_matcher_(std::make_unique<MappingScanMatcher>()),
       frame_idx_cur_(0),
       hybrid_grid_map_corner_(3.0),
       hybrid_grid_map_surf_(3.0) {
@@ -156,7 +157,7 @@ void LaserMapping::Run() {
       cloud_map.cloud_surf_less_flat = laserCloudSurfFromMap;
       scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
       scan_curr.cloud_surf_less_flat = laserCloudSurfLastStack;
-      MappingScanMatcher::Match(cloud_map, scan_curr, &pose_map_scan2world_);
+      scan_matcher_->Match(cloud_map, scan_curr, &pose_map_scan2world_);
     } else {
       LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
     }
