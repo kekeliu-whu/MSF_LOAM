@@ -62,19 +62,30 @@ DEFINE_string(bag_filename, "", "Bag file to read in offline mode.");
 
 namespace {
 
-enum PointLabel { P_UNKNOWN = 0, P_LESS_SHARP = 1, P_SHARP = 2, P_FLAT = -1 };
+/**
+ * 特征点提取步骤如下：
+ * 1. 将每条扫描线分为6个分片，每个分片约180个点；
+ * 2. 将每个分片的所有点按照曲率从大到小排序；
+ * 3.
+ * 标记曲率最高的2个点为P_SHARP，最高的20个点为P_LESS_SHARP，邻域标为P_LESS_SHARP；
+ * 4. 标记曲率最低的4个点为P_FLAT；
+ * 5. 标记所有的P_FLAT点和P_UNKNOWN点为P_LESS_FLAT点，并做降采样。
+ */
+enum class PointLabel {
+  // 未标记类型的点
+  P_UNKNOWN,
+  // 边角点
+  P_SHARP,
+  // 次边角点
+  P_LESS_SHARP,
+  // 平面点
+  P_FLAT,
+};
 
 const int kDefaultScanNum = 16;
 const double kScanPeriod  = 0.1;  // 扫描周期
 double g_min_range;               // 最小扫描距离
 int g_scan_num;                   // 扫描线数
-
-std::vector<float> g_cloud_curvatures(400000);    // 点的曲率
-std::vector<int> g_cloud_sorted_indices(400000);  // 通过曲率对点排序
-std::vector<bool> g_is_cloud_neighbor_picked(400000);  // 临近点是否已被选取
-std::vector<int> g_cloud_labels(400000);  // 扫描线上点的类型
-
-}  // namespace
 
 template <typename PointT>
 void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
@@ -100,6 +111,8 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
   cloud_out.width    = static_cast<uint32_t>(j);
   cloud_out.is_dense = true;
 }
+
+}  // namespace
 
 void HandleLaserCloudMessage(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
@@ -194,10 +207,9 @@ void HandleLaserCloudMessage(
     laserCloudScans[scanID].push_back(point);
   }
   LOG_IF(WARNING, cloudSize - count > 10)
-      << "More than 10 invalid points: no matching scan id!!";
+      << cloudSize - count << " invalid points without matching scan id!";
 
-  cloudSize = count;
-  LOG(INFO) << "[REG] Cloud size: " << cloudSize;
+  LOG(INFO) << "[REG] Cloud size: " << count;
 
   PointCloudPtr laser_cloud(new PointCloud);
   for (int i = 0; i < g_scan_num; i++) {
@@ -208,6 +220,13 @@ void HandleLaserCloudMessage(
 
   LOG_STEP_TIME("REG", "Re-index scans", t_prepare.toc());
 
+  std::size_t _N = laser_cloud->size();
+  CHECK_GT(_N, 0);
+  std::vector<float> cloud_curvatures(_N);         // 点的曲率
+  std::vector<int> cloud_sorted_indices(_N);       // 通过曲率对点排序
+  std::vector<bool> cloud_is_neighbor_picked(_N);  // 临近点是否已被选取
+  std::vector<PointLabel> cloud_labels(_N);        // 扫描线上点的类型
+
   /**
    * @brief 计算所有点的曲率
    *
@@ -215,7 +234,7 @@ void HandleLaserCloudMessage(
    * ...
    * curv(i) = dx(i)^2 + dy(i)^2 + dz(i)^2
    */
-  for (int i = 5; i < cloudSize - 5; i++) {
+  for (int i = 5; i < laser_cloud->size() - 5; i++) {
     double diffX = laser_cloud->points[i - 5].x + laser_cloud->points[i - 4].x +
                    laser_cloud->points[i - 3].x + laser_cloud->points[i - 2].x +
                    laser_cloud->points[i - 1].x -
@@ -238,10 +257,10 @@ void HandleLaserCloudMessage(
                    laser_cloud->points[i + 3].z + laser_cloud->points[i + 4].z +
                    laser_cloud->points[i + 5].z;
 
-    g_cloud_curvatures[i]     = diffX * diffX + diffY * diffY + diffZ * diffZ;
-    g_cloud_sorted_indices[i] = i;
-    g_is_cloud_neighbor_picked[i] = false;
-    g_cloud_labels[i]             = P_UNKNOWN;
+    cloud_curvatures[i]         = diffX * diffX + diffY * diffY + diffZ * diffZ;
+    cloud_sorted_indices[i]     = i;
+    cloud_is_neighbor_picked[i] = false;
+    cloud_labels[i]             = PointLabel::P_UNKNOWN;
   }
 
   TicToc t_pts;
@@ -265,55 +284,57 @@ void HandleLaserCloudMessage(
 
       TicToc t_tmp;
       // 对每片点云中的曲率排序
-      std::sort(g_cloud_sorted_indices.begin() + sp,
-                g_cloud_sorted_indices.begin() + ep + 1,
-                [](int i, int j) -> bool {
-                  return g_cloud_curvatures[i] < g_cloud_curvatures[j];
+      std::sort(cloud_sorted_indices.begin() + sp,
+                cloud_sorted_indices.begin() + ep + 1,
+                [&cloud_curvatures](int i, int j) -> bool {
+                  return cloud_curvatures[i] < cloud_curvatures[j];
                 });
       t_q_sort += t_tmp.toc();
 
-      // 取曲率最高的前2个点为sharp点，前20个为less_sharp点（每次选取时标记周围的十一个点）
+      // 取曲率最高的前2个点为sharp点，前20个为less_sharp点
       int largest_picked_num = 0;
       for (int k = ep; k >= sp; k--) {
-        int ind = g_cloud_sorted_indices[k];
+        int ind = cloud_sorted_indices[k];
 
-        if (!g_is_cloud_neighbor_picked[ind] && g_cloud_curvatures[ind] > 0.1) {
+        if (!cloud_is_neighbor_picked[ind] && cloud_curvatures[ind] > 0.1) {
           largest_picked_num++;
           if (largest_picked_num <= 2) {
-            g_cloud_labels[ind] = P_SHARP;
+            cloud_labels[ind] = PointLabel::P_SHARP;
             cloud_corner_sharp->push_back(laser_cloud->points[ind]);
             cloud_corner_less_sharp->push_back(laser_cloud->points[ind]);
           } else if (largest_picked_num <= 20) {
-            g_cloud_labels[ind] = P_LESS_SHARP;
+            cloud_labels[ind] = PointLabel::P_LESS_SHARP;
             cloud_corner_less_sharp->push_back(laser_cloud->points[ind]);
           } else {
             break;
           }
 
           // 标记临近点
-          g_is_cloud_neighbor_picked[ind] = true;
+          cloud_is_neighbor_picked[ind] = true;
           for (int l = 1; l <= 5; l++) {
             auto vec = laser_cloud->points[ind + l].getVector3fMap() -
                        laser_cloud->points[ind + l - 1].getVector3fMap();
             if (vec.squaredNorm() > 0.05) break;
-            g_is_cloud_neighbor_picked[ind + l] = true;
+            cloud_is_neighbor_picked[ind + l] = true;
+            cloud_labels[ind + l]             = PointLabel::P_LESS_SHARP;
           }
           for (int l = -1; l >= -5; l--) {
             auto vec = laser_cloud->points[ind + l].getVector3fMap() -
                        laser_cloud->points[ind + l + 1].getVector3fMap();
             if (vec.squaredNorm() > 0.05) break;
-            g_is_cloud_neighbor_picked[ind + l] = true;
+            cloud_is_neighbor_picked[ind + l] = true;
+            cloud_labels[ind + l]             = PointLabel::P_LESS_SHARP;
           }
         }
       }
 
-      // 取曲率最低的前4个点为flat点（每次选取时标记周围的十一个点）
+      // 取曲率最低的前4个点为flat点
       int smallest_picked_num = 0;
       for (int k = sp; k <= ep; k++) {
-        int ind = g_cloud_sorted_indices[k];
+        int ind = cloud_sorted_indices[k];
 
-        if (!g_is_cloud_neighbor_picked[ind] && g_cloud_curvatures[ind] < 0.1) {
-          g_cloud_labels[ind] = P_FLAT;
+        if (!cloud_is_neighbor_picked[ind] && cloud_curvatures[ind] < 0.1) {
+          cloud_labels[ind] = PointLabel::P_FLAT;
           cloud_surf_flat->push_back(laser_cloud->points[ind]);
 
           smallest_picked_num++;
@@ -322,25 +343,26 @@ void HandleLaserCloudMessage(
           }
 
           // 标记临近点
-          g_is_cloud_neighbor_picked[ind] = true;
+          cloud_is_neighbor_picked[ind] = true;
           for (int l = 1; l <= 5; l++) {
             auto vec = laser_cloud->points[ind + l].getVector3fMap() -
                        laser_cloud->points[ind + l - 1].getVector3fMap();
             if (vec.squaredNorm() > 0.05) break;
-            g_is_cloud_neighbor_picked[ind + l] = true;
+            cloud_is_neighbor_picked[ind + l] = true;
           }
           for (int l = -1; l >= -5; l--) {
             auto vec = laser_cloud->points[ind + l].getVector3fMap() -
                        laser_cloud->points[ind + l + 1].getVector3fMap();
             if (vec.squaredNorm() > 0.05) break;
-            g_is_cloud_neighbor_picked[ind + l] = true;
+            cloud_is_neighbor_picked[ind + l] = true;
           }
         }
       }
 
       // 将flat点和未标记点都标记为less_flat点
       for (int k = sp; k <= ep; k++) {
-        if (g_cloud_labels[k] == P_FLAT || g_cloud_labels[k] == P_UNKNOWN) {
+        if (cloud_labels[k] == PointLabel::P_FLAT ||
+            cloud_labels[k] == PointLabel::P_UNKNOWN) {
           surfPointsLessFlatScan->push_back(laser_cloud->points[k]);
         }
       }
