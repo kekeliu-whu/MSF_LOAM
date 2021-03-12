@@ -75,7 +75,7 @@ class IntegrationBase
         result_delta_p = delta_p + delta_v * _dt + 0.5 * un_acc * _dt * _dt;
         // eq7.3
         result_delta_v = delta_v + un_acc * _dt;
-        // 每两帧之间有一组预积分，其内部的零偏值相同
+        // bias remain constant between two consecutive frames
         result_linearized_ba = linearized_ba;
         result_linearized_bg = linearized_bg;         
 

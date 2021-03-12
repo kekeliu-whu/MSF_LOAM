@@ -19,7 +19,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
 
-        // P Q V Ba Bg 是待估计量，表示第i/j帧相片的(P,V,Q)状态和偏差
+        // P Q V Ba Bg are state to be estimated
         // P=(X,Y,Z)
         Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
         // Q=(x,y,z,w)
@@ -45,12 +45,13 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 #endif
 
         Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
-        // 通过估计量计算残差，更新雅克比和协方差矩阵 @eq44
+        // eq44
+        // calculate residual, update jacobian matrix and covariance
         residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
                                             Pj, Qj, Vj, Baj, Bgj);
 
-        // ceres直接使用单位阵作为残差的协方差矩阵
-        // 为了方便ceres计算，对协方差阵做llt分解，再分别乘到残差和雅克比矩阵上
+        // ceres take identity matrix as covariance
+        // so we have to use llt decomposition for covariance, and then multiply it to the residual and Jacobian matrix respectively
         Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
         //sqrt_info.setIdentity();
         residual = sqrt_info * residual;
@@ -73,7 +74,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9>
 ///                ROS_BREAK();
             }
 
-            // 雅克比矩阵求解参考eq46-49，注意雅克比矩阵也用了上面的协方差矩阵
+            // eq46-49
+            // compute jacobians
             if (jacobians[0])
             {
                 Eigen::Map<Eigen::Matrix<double, 15, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
