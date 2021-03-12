@@ -14,8 +14,6 @@ find_package(catkin REQUIRED COMPONENTS
         rospy
         rosbag
         std_msgs
-        image_transport
-        cv_bridge
         tf)
 
 find_package(PCL REQUIRED)
