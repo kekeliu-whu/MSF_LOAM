@@ -37,7 +37,7 @@ struct RelativePoseFactor {
   template <typename T>
   bool operator()(const T *r_i, const T *t_i, const T *r_j, const T *t_j,
                   T *residual) const {
-    // Use {} instead of () to avoid be treated as a function declaration
+    // Use {} instead of () to avoid being treated as a function declaration
     Rigid3<T> pose_i{Vector<T>(t_i), Quaternion<T>(r_i)};
     Rigid3<T> pose_j{Vector<T>(t_j), Quaternion<T>(r_j)};
     Rigid3<T> pose_ij       = pose_i.inverse() * pose_j;
