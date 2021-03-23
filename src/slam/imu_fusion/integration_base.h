@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../utility/utility.h"
-#include "../parameters.h"
+#include "slam/imu_fusion/utility.h"
+#include "slam/imu_fusion/parameters.h"
 
 #include <ceres/ceres.h>
 using namespace Eigen;
@@ -225,4 +225,5 @@ class IntegrationBase
     std::vector<Eigen::Vector3d> acc_buf;
     std::vector<Eigen::Vector3d> gyr_buf;
 
+    Eigen::Matrix<double, 18, 18> noise;
 };
