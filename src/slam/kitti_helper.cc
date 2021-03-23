@@ -11,7 +11,7 @@
 #include <rosbag/bag.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <Eigen/Dense>
-#include <boost/progress.hpp>
+#include <boost/timer/timer.hpp>
 #include <fstream>
 #include <iostream>
 #include <string>

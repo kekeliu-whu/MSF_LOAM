@@ -44,7 +44,7 @@ rosbag play ${YOUR_DATASET_FOLDER}/nsh_indoor_outdoor.bag
 | -------------------- | ---------------- | --------- | ------------------------------------------------------------ |
 | LiDAR (**Required**) | /velodyne_points | 10        |                                                              |
 | GPS                  | /odometry_gt     | 1         |                                                              |
-| IMU                  | /imu             | 100       | higher is better, use [xsens_ros_mti_driver](https://github.com/kekliu/xsens_ros_mti_driver) to record IMU data with high time precision |
+| IMU                  | /imu             | 400       | higher is better, use [xsens_ros_mti_driver](https://github.com/kekliu/xsens_ros_mti_driver) to record IMU data with high time precision |
 
 ## 4. Acknowledgements
 
