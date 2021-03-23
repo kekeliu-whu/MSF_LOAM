@@ -3,9 +3,9 @@
 #include <iostream>
 #include <eigen3/Eigen/Dense>
 
-#include "../utility/utility.h"
-#include "../parameters.h"
-#include "integration_base.h"
+#include "slam/imu_fusion/utility.h"
+#include "slam/imu_fusion/parameters.h"
+#include "slam/imu_fusion/integration_base.h"
 
 #include <ceres/ceres.h>
 
