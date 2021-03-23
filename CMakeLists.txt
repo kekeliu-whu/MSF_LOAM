@@ -38,6 +38,7 @@ add_executable(msf_loam_node
         src/common/time_def.cc
         src/slam/hybrid_grid.cc
         src/slam/imu_fusion/imu_tracker.cc
+        src/slam/imu_fusion/pose_local_parameterization.cc
         src/slam/gps_fusion/gps_fusion.cc
         src/slam/msg_conversion.cc
         src/slam/scan_registration.cc
