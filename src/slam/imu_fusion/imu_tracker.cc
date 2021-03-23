@@ -20,6 +20,7 @@
 
 #include "common/rigid_transform.h"
 #include "slam/imu_fusion/imu_tracker.h"
+#include "imu_factor.h"
 
 namespace {
 
