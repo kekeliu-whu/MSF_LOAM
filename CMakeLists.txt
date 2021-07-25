@@ -18,7 +18,16 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(PCL REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(Protobuf REQUIRED)
 
+if(Protobuf_VERBOSE)
+  message(STATUS "Using Protocol Buffers ${protobuf_VERSION}")
+endif()
+
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS proto/msg.proto)
+
+include_directories(${Protobuf_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(
         include
         src
@@ -48,8 +57,10 @@ add_executable(msf_loam_node
         src/slam/local/scan_matching/mapping_scan_matcher.cc
         src/slam/local/scan_matching/scan_matcher.cc
         src/slam/loop_closure/sparse_pose_graph.cc
-        src/slam/local/scan_matching/lidar_factor.cc)
-target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES})
+        src/slam/local/scan_matching/lidar_factor.cc
+        ${PROTO_SRCS}
+)
+target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES})
 
 #add_executable(msf_loam_gps_fusion_test
 #  src/common/time_def.cc
