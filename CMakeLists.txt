@@ -4,7 +4,7 @@ project(msf_loam_velodyne VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_definitions(-D_SIM_GPS)
+#add_definitions(-D_SIM_GPS)
 
 find_package(catkin REQUIRED COMPONENTS
         geometry_msgs
@@ -19,10 +19,11 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(PCL REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(Protobuf REQUIRED)
+find_package(fmt REQUIRED)
 
-if(Protobuf_VERBOSE)
-  message(STATUS "Using Protocol Buffers ${protobuf_VERSION}")
-endif()
+if (Protobuf_VERBOSE)
+    message(STATUS "Using Protocol Buffers ${protobuf_VERSION}")
+endif ()
 
 protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS proto/msg.proto)
 
@@ -50,7 +51,7 @@ add_executable(msf_loam_node
         src/slam/imu_fusion/pose_local_parameterization.cc
         src/slam/gps_fusion/gps_fusion.cc
         src/slam/msg_conversion.cc
-        src/slam/scan_registration.cc
+        src/msf_loam_node.cc
         src/slam/local/laser_mapping.cc
         src/slam/local/laser_odometry.cc
         src/slam/local/scan_matching/odometry_scan_matcher.cc
@@ -59,8 +60,28 @@ add_executable(msf_loam_node
         src/slam/loop_closure/sparse_pose_graph.cc
         src/slam/local/scan_matching/lidar_factor.cc
         ${PROTO_SRCS}
-)
+        )
 target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES})
+
+add_executable(calib_lidar_imu
+        src/calib_lidar_imu.cc
+        src/common/time_def.cc
+        src/slam/hybrid_grid.cc
+        src/slam/imu_fusion/imu_tracker.cc
+        src/slam/imu_fusion/pose_local_parameterization.cc
+        src/slam/gps_fusion/gps_fusion.cc
+        src/slam/imu_fusion/initial_ex_rotation.cc
+        src/slam/msg_conversion.cc
+        src/slam/local/laser_mapping.cc
+        src/slam/local/laser_odometry.cc
+        src/slam/local/scan_matching/odometry_scan_matcher.cc
+        src/slam/local/scan_matching/mapping_scan_matcher.cc
+        src/slam/local/scan_matching/scan_matcher.cc
+        src/slam/loop_closure/sparse_pose_graph.cc
+        src/slam/local/scan_matching/lidar_factor.cc
+        ${PROTO_SRCS}
+        )
+target_link_libraries(calib_lidar_imu ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES} fmt)
 
 #add_executable(msf_loam_gps_fusion_test
 #  src/common/time_def.cc

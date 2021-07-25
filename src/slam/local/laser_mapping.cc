@@ -6,6 +6,9 @@
 #include <tf/transform_broadcaster.h>
 #include <random>
 
+#include "common/common.h"
+#include "common/time_def.h"
+#include "msg.pb.h"
 #include "slam/local/laser_mapping.h"
 #include "slam/local/scan_matching/mapping_scan_matcher.h"
 #include "slam/msg_conversion.h"
@@ -14,6 +17,7 @@ namespace {
 
 bool g_is_offline_mode;
 bool g_should_exit = false;
+proto::PbData pb_data;
 
 }  // namespace
 
@@ -87,7 +91,7 @@ void LaserMapping::AddLaserOdometryResult(
   aftmapped_odom.child_frame_id  = "aft_mapped";
   aftmapped_odom.header.frame_id = "camera_init";
   aftmapped_odom.header.stamp    = ToRos(laser_odometry_result.timestamp);
-  aftmapped_odom.pose = ToRos(pose_odom2map_ * laser_odometry_result.odom_pose);
+  aftmapped_odom.pose            = ToRos(pose_odom2map_ * laser_odometry_result.odom_pose);
   aftmapped_odom_highfrec_publisher_.publish(aftmapped_odom);
 }
 
@@ -220,14 +224,26 @@ void LaserMapping::Run() {
     transform_broadcaster_.sendTransform(tf::StampedTransform(
         transform, aftmapped_odom.header.stamp, "/camera_init", "/aft_mapped"));
 
+    auto odom_msg = pb_data.add_odom_datas();
+    odom_msg->set_timestamp(aftmapped_odom.header.stamp.toNSec());
+    *odom_msg->mutable_pose()->mutable_rotation()    = ToProto(pose_map_scan2world_.rotation());
+    *odom_msg->mutable_pose()->mutable_translation() = ToProto(pose_map_scan2world_.translation());
+
     frame_idx_cur_++;
   }
+
+  std::ofstream ofs(kTrajectoryPbPath, std::ios_base::out | std::ios_base::binary);
+  pb_data.SerializeToOstream(&ofs);
 }
 
 void LaserMapping::AddImu(const ImuData &imu_data) {
   // TODO
   // calib imu and lidar
   // LOG(FATAL) << "AddIMU not implemented yet.";
+  auto imu_msg = pb_data.add_imu_datas();
+  imu_msg->set_timestamp(ToUniversal(imu_data.time));
+  *imu_msg->mutable_angular_velocity()    = ToProto(imu_data.angular_velocity);
+  *imu_msg->mutable_linear_acceleration() = ToProto(imu_data.linear_acceleration);
 }
 
 void LaserMapping::PublishScan(const TimestampedPointCloud &scan) {
