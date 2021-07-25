@@ -52,9 +52,9 @@
 
 #include "common/common.h"
 #include "common/tic_toc.h"
-#include "msg_conversion.h"
 #include "slam/imu_fusion/imu_tracker.h"
 #include "slam/local/laser_odometry.h"
+#include "slam/msg_conversion.h"
 
 DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
 

@@ -35,3 +35,28 @@ ros::Time ToRos(const Time &time) {
       uint32_t(t / UniversalTimeScaleClock::f1),
       uint32_t(t % UniversalTimeScaleClock::f1 * UniversalTimeScaleClock::f2)};
 }
+
+proto::Vector3d ToProto(const Vector3d &v) {
+  proto::Vector3d pv;
+  pv.set_x(v.x());
+  pv.set_y(v.y());
+  pv.set_z(v.z());
+  return pv;
+}
+
+proto::Quaterniond ToProto(const Quaterniond &v) {
+  proto::Quaterniond pq;
+  pq.set_x(v.x());
+  pq.set_y(v.y());
+  pq.set_z(v.z());
+  pq.set_w(v.w());
+  return pq;
+}
+
+Vector3d FromProto(const proto::Vector3d &pv) {
+  return {pv.x(), pv.y(), pv.z()};
+}
+
+Quaterniond FromProto(const proto::Quaterniond &pv) {
+  return {pv.w(), pv.x(), pv.y(), pv.z()};
+}
