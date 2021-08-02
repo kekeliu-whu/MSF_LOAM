@@ -11,13 +11,12 @@ using namespace std;
 class InitialEXRotation {
  public:
   InitialEXRotation();
-  bool CalibrationExRotation(Eigen::Quaterniond delta_q_lidar, Eigen::Quaterniond delta_q_imu, Eigen::Matrix3d &calib_ric_result);
+  bool CalibrationExRotation(Eigen::Quaterniond delta_q_lidar, Eigen::Quaterniond delta_q_imu, Eigen::Quaterniond *calib_ric_result);
 
  private:
   int frame_count;
 
-  vector<Eigen::Matrix3d> Rc;
-  vector<Eigen::Matrix3d> Rimu;
-  vector<Eigen::Matrix3d> Rc_g;
-  Eigen::Matrix3d ric;
+  vector<Eigen::Quaterniond> Rc;
+  vector<Eigen::Quaterniond> Rimu;
+  Eigen::Quaterniond ric;
 };
