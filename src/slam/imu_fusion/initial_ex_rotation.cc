@@ -1,4 +1,6 @@
 #include "initial_ex_rotation.h"
+#include <Eigen/src/Geometry/Quaternion.h>
+#include <cstdio>
 #include "utility.h"
 
 using namespace Eigen;
@@ -11,35 +13,32 @@ const int kWindowSize = 10;
 
 InitialEXRotation::InitialEXRotation() {
   frame_count = 0;
-  Rc.push_back(Matrix3d::Identity());
-  Rc_g.push_back(Matrix3d::Identity());
-  Rimu.push_back(Matrix3d::Identity());
-  ric = Matrix3d::Identity();
+  ric         = Quaterniond::Identity();
 }
 
-bool InitialEXRotation::CalibrationExRotation(Quaterniond delta_q_lidar, Quaterniond delta_q_imu, Matrix3d &calib_ric_result) {
+bool InitialEXRotation::CalibrationExRotation(Quaterniond delta_q_lidar, Quaterniond delta_q_imu, Quaterniond *ric_result) {
   frame_count++;
-  Rc.push_back(delta_q_lidar.toRotationMatrix());
-  Rimu.push_back(delta_q_imu.toRotationMatrix());
-  Rc_g.push_back(ric.inverse() * delta_q_imu * ric);
+  Rc.push_back(delta_q_lidar);
+  Rimu.push_back(delta_q_imu);
 
   Eigen::MatrixXd A(frame_count * 4, 4);
   A.setZero();
-  int sum_ok = 0;
-  for (int i = 1; i <= frame_count; i++) {
+  for (int i = 0; i < frame_count; i++) {
     Quaterniond r1(Rc[i]);
-    Quaterniond r2(Rc_g[i]);
+    Quaterniond r2 = ric * Rimu[i] * ric.inverse();
 
     double angular_distance = 180 / M_PI * r1.angularDistance(r2);
+    double a1               = 180 / M_PI * r1.angularDistance(Quaterniond::Identity());
+    double a2               = 180 / M_PI * r2.angularDistance(Quaterniond::Identity());
+    printf("%10.5f%10.5f%10.5f\n", a1, a2, angular_distance);
     ROS_DEBUG(
         "%d %f", i, angular_distance);
 
     double huber = angular_distance > 5.0 ? 5.0 / angular_distance : 1.0;
-    ++sum_ok;
     Matrix4d L, R;
 
-    double w            = Quaterniond(Rc[i]).w();
-    Vector3d q          = Quaterniond(Rc[i]).vec();
+    double w            = Rc[i].w();
+    Vector3d q          = Rc[i].vec();
     L.block<3, 3>(0, 0) = w * Matrix3d::Identity() + Utility::skewSymmetric(q);
     L.block<3, 1>(0, 3) = q;
     L.block<1, 3>(3, 0) = -q.transpose();
@@ -53,19 +52,16 @@ bool InitialEXRotation::CalibrationExRotation(Quaterniond delta_q_lidar, Quatern
     R.block<1, 3>(3, 0) = -q.transpose();
     R(3, 3)             = w;
 
-    A.block<4, 4>((i - 1) * 4, 0) = huber * (L - R);
+    A.block<4, 4>(i * 4, 0) = huber * (L - R);
   }
 
   JacobiSVD<MatrixXd> svd(A, ComputeFullU | ComputeFullV);
-  Matrix<double, 4, 1> x = svd.matrixV().col(3);
-  Quaterniond estimated_R(x);
-  ric = estimated_R.toRotationMatrix().inverse();
-  //cout << svd.singularValues().transpose() << endl;
-  //cout << ric << endl;
+  ric.coeffs() = svd.matrixV().col(3);
+  ric.normalize();
   Vector3d ric_cov;
   ric_cov = svd.singularValues().tail<3>();
   if (frame_count >= kWindowSize && ric_cov(1) > 0.25) {
-    calib_ric_result = ric;
+    *ric_result = ric;
     return true;
   } else
     return false;

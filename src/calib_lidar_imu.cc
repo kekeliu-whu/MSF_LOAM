@@ -21,7 +21,7 @@ int main() {
   }
 
   auto& imu_datas  = pb_data.imu_datas();
-  auto& odom_datas = pb_data.imu_datas();
+  auto& odom_datas = pb_data.odom_datas();
 
   //  std::cout << pb_data.imu_datas_size() << std::endl;
   //  std::cout << pb_data.odom_datas_size() << std::endl;
@@ -29,7 +29,8 @@ int main() {
   InitialEXRotation initialExRotation;
 
   const int kStep = 3;
-  for (int i = 500; i < pb_data.odom_datas_size() - kStep; i += kStep) {
+  Quaterniond ric;
+  for (int i = 0; i < pb_data.odom_datas_size() - kStep; i += kStep) {
     const auto& l1 = pb_data.odom_datas(i);
     auto l1_it     = std::lower_bound(imu_datas.begin(), imu_datas.end(), l1.timestamp(), [](const proto::ImuData& odom, uint64_t time) {
       return odom.timestamp() < time;
@@ -50,17 +51,16 @@ int main() {
     }
 
     // calib
-    Eigen::Matrix3d result;
     bool calib_ok = initialExRotation.CalibrationExRotation(
         FromProto(l1.pose().rotation()).inverse() * FromProto(l2.pose().rotation()),
         delta_q_imu,
-        result);
+        &ric);
 
-    if (calib_ok) {
-      Eigen::AngleAxisd aa(result);
-      fmt::print("frame_idx={} ,ok={}, axis=[{},{},{}], angle={}\n",
-                 i, calib_ok, aa.axis().x(), aa.axis().y(), aa.axis().z(), aa.angle() * 180 / M_PI);
-      break;
-    }
+    // if (calib_ok) {
+    Eigen::AngleAxisd aa(ric);
+    fmt::print("frame_idx={} ,ok={}, axis=[{},{},{}], angle={}\n",
+               i, calib_ok, aa.axis().x(), aa.axis().y(), aa.axis().z(), aa.angle() * 180 / M_PI);
+    // break;
+    // }
   }
 }
