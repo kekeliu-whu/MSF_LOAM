@@ -36,6 +36,7 @@
 
 #include <gflags/gflags.h>
 #include <nav_msgs/Odometry.h>
+#include <pcl/PCLPointCloud2.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -47,14 +48,15 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <Eigen/Eigen>
 #include <cmath>
+#include <pcl/impl/point_types.hpp>
 #include <string>
 #include <vector>
 
 #include "common/common.h"
 #include "common/tic_toc.h"
-#include "msg_conversion.h"
 #include "slam/imu_fusion/imu_tracker.h"
 #include "slam/local/laser_odometry.h"
+#include "slam/msg_conversion.h"
 
 DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
 
