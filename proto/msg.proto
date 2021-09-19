@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package proto;
+
+message Vector3d {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+}
+
+message Quaterniond {
+  double x = 1;
+  double y = 2;
+  double z = 3;
+  double w = 4;
+}
+
+message Rigid3d {
+  Vector3d translation = 1;
+  Quaterniond rotation = 2;
+}
+
+message ImuData {
+  uint64 timestamp = 1;
+  Vector3d linear_acceleration = 2;
+  Vector3d angular_velocity = 3;
+}
+
+message OdometryData {
+  uint64 timestamp = 1;
+  Rigid3d pose = 2;
+}
+
+message PbData {
+  repeated ImuData imu_datas = 1;
+  repeated OdometryData odom_datas = 2;
+}

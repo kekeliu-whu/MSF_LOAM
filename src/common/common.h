@@ -41,7 +41,13 @@
 
 #define DISTORTION 0
 
+const std::string kTrajectoryPbPath = "/tmp/trajectory.pbstream";
+
 using PointType          = pcl::PointXYZI;
 using PointCloud         = pcl::PointCloud<pcl::PointXYZI>;
 using PointCloudPtr      = PointCloud::Ptr;
 using PointCloudConstPtr = PointCloud::ConstPtr;
+
+using Vector3d    = Eigen::Vector3d;
+using Matrix3d    = Eigen::Matrix3d;
+using Quaterniond = Eigen::Quaterniond;
