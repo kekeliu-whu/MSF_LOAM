@@ -41,15 +41,15 @@ catkin_package(
         DEPENDS EIGEN3 PCL
 )
 
-
-add_executable(msf_loam_node
+set(
+        PROJECT_SRCS
         src/common/time_def.cc
         src/slam/hybrid_grid.cc
         src/slam/imu_fusion/imu_tracker.cc
+        src/slam/imu_fusion/initial_ex_rotation.cc
         src/slam/imu_fusion/pose_local_parameterization.cc
-        src/slam/gps_fusion/gps_fusion.cc
         src/slam/msg_conversion.cc
-        src/msf_loam_node.cc
+        src/slam/gps_fusion/gps_fusion.cc
         src/slam/local/laser_mapping.cc
         src/slam/local/laser_odometry.cc
         src/slam/local/scan_matching/odometry_scan_matcher.cc
@@ -57,28 +57,20 @@ add_executable(msf_loam_node
         src/slam/local/scan_matching/scan_matcher.cc
         src/slam/loop_closure/sparse_pose_graph.cc
         src/slam/local/scan_matching/lidar_factor.cc
+)
+
+add_executable(msf_loam_node
+        src/msf_loam_node.cc
+        ${PROJECT_SRCS}
         ${PROTO_SRCS}
-        )
+)
 target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES})
 
 add_executable(calib_lidar_imu
         src/calib_lidar_imu.cc
-        src/common/time_def.cc
-        src/slam/hybrid_grid.cc
-        src/slam/imu_fusion/imu_tracker.cc
-        src/slam/imu_fusion/pose_local_parameterization.cc
-        src/slam/gps_fusion/gps_fusion.cc
-        src/slam/imu_fusion/initial_ex_rotation.cc
-        src/slam/msg_conversion.cc
-        src/slam/local/laser_mapping.cc
-        src/slam/local/laser_odometry.cc
-        src/slam/local/scan_matching/odometry_scan_matcher.cc
-        src/slam/local/scan_matching/mapping_scan_matcher.cc
-        src/slam/local/scan_matching/scan_matcher.cc
-        src/slam/loop_closure/sparse_pose_graph.cc
-        src/slam/local/scan_matching/lidar_factor.cc
+        ${PROJECT_SRCS}
         ${PROTO_SRCS}
-        )
+)
 target_link_libraries(calib_lidar_imu ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES} fmt)
 
 #add_executable(msf_loam_gps_fusion_test
@@ -90,3 +82,7 @@ target_link_libraries(calib_lidar_imu ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${P
 
 add_executable(kitti_helper src/slam/kitti_helper.cc)
 target_link_libraries(kitti_helper ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+include(cmake/google-test.cmake)
+add_test_library_srcs(${PROJECT_SRCS})
+enable_automatic_test_and_benchmark()
