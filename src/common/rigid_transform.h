@@ -33,7 +33,7 @@ using Quaternion = Eigen::Quaternion<T>;
 template <typename FloatType>
 class Rigid3 {
  public:
-  using Vector_ = Vector<FloatType>;
+  using Vector_     = Vector<FloatType>;
   using Quaternion_ = Quaternion<FloatType>;
 
   Rigid3()
@@ -64,7 +64,7 @@ class Rigid3 {
 
   Rigid3 inverse() const {
     const Quaternion_ rotation = rotation_.conjugate();
-    const Vector_ translation = -(rotation * translation_);
+    const Vector_ translation  = -(rotation * translation_);
     return Rigid3(translation, rotation);
   }
 
@@ -116,8 +116,7 @@ using Rigid3f = Rigid3<float>;
 #include "common/common.h"
 
 inline PointType operator*(const Rigid3d& transform, const PointType& point) {
-  PointType point_out;
-  point_out.intensity = point.intensity;
+  PointType point_out = point;
   point_out.getVector3fMap() =
       (transform * point.getVector3fMap().cast<double>()).cast<float>();
   return point_out;

@@ -65,7 +65,7 @@ LaserOdometry::LaserOdometry(bool is_offline_mode)
 
 LaserOdometry::~LaserOdometry() { LOG(INFO) << "LaserOdometry finished."; }
 
-void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
+void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_curr) {
   auto rotation = AdvanceImuTracker(scan_curr.timestamp);
   if (rotation) {
     scan_curr.imu_rotation = *rotation;
@@ -78,7 +78,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   } else {
     // pose_curr2last_.rotation() =
     // scan_last_.imu_rotation * scan_curr.imu_rotation.inverse();
-    scan_matcher_->Match(scan_last_, scan_curr, &pose_curr2last_);
+    scan_matcher_->MatchScan2Scan(scan_last_, scan_curr, &pose_curr2last_);
 
     LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
     LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
@@ -102,7 +102,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud scan_curr) {
   laser_path_publisher_.publish(laser_path_);
 
   scan_curr.odom_pose = pose_scan2world_;
-  laser_mapper_handler_->AddLaserOdometryResult(scan_curr);
+  laser_mapper_handler_->AddLaserOdometryResult(ToTypePointXYZI(scan_curr));
 
   scan_last_ = scan_curr;
 
