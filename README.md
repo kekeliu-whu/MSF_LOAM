@@ -12,14 +12,14 @@ MSF_LOAM is a **M**ulti-**S**ensor **F**usion **SLAM** implementation based on [
 
 ## 1. Prerequisites
 ### 1.1 **Ubuntu** and **ROS**
-Recommend: Ubuntu 18.04 and [ROS melodic](http://wiki.ros.org/ROS/Installation).
+Recommend: Ubuntu 20.04 and [ROS Noetic](http://wiki.ros.org/ROS/Installation).
 
-### 1.2. **Ceres Solver**
+### 1.2. Dependencies
+**Ceres Solver**
 ```shell
 sudo apt install libceres-dev
 ```
-
-### 1.3. **PCL**
+**PCL**
 ```shell
 sudo apt install libpcl-dev
 ```
@@ -29,7 +29,10 @@ Clone the repository and catkin_make.
 
 ## 3. Run
 
-### 3.1 Velodyne VLP-16 Example
+### 3.1 Datasets
+TODO
+
+### 3.2 Velodyne VLP-16 Example
 
 Download [NSH indoor outdoor](https://drive.google.com/file/d/1s05tBQOLNEDDurlg48KiUWxCp-YqYyGH/view) to YOUR_DATASET_FOLDER. 
 
@@ -38,23 +41,26 @@ roslaunch msf_loam_velodyne msf_loam_velodyne_VLP_16.launch
 rosbag play ${YOUR_DATASET_FOLDER}/nsh_indoor_outdoor.bag
 ```
 
-### 3.2 Use self-collected data
+### 3.3 Use self-collected data
 
 | Sensor               | ROS topic        | Frequency | Remark                                                       |
 | -------------------- | ---------------- | --------- | ------------------------------------------------------------ |
 | LiDAR (**Required**) | /velodyne_points | 10        |                                                              |
 | GPS                  | /odometry_gt     | 1         |                                                              |
-| IMU                  | /imu             | 400       | higher is better, use [xsens_ros_mti_driver](https://github.com/kekliu/xsens_ros_mti_driver) to record IMU data with high time precision |
+| IMU                  | /imu             | 400       | higher frequency is better, use [xsens_ros_mti_driver](https://github.com/kekliu/xsens_ros_mti_driver) to record IMU data with high time precision |
+> **ATTENTION** /velodyne_points must satisfy either of the following requirements:  
+>> a. The field 'time' exists by using latest velodyne ROS driver;  
+>> b. Ring increases with vertical angle and ring points are organized in CW order.
 
 ## 4. Acknowledgements
 
-Thanks for LOAM(J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time) and [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM).
+Thanks for LOAM (J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time) and [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM).
 
 ## 5. TODO
 For some reasons, this repo will be massively updated, aiming to add features as following:
-* IMU intrinsic and extrinsic paramerter estimation
-* IMU LiDAR fusion localization (tightly-coupled)
-* LiDAR scan undistortion
+* IMU extrinsic parameter estimation
+* IMU-LiDAR tightly-coupled localization and LiDAR scan undistortion by IMU preintegration
+* Loop closure by scan context
 * Online temporal calibration for system
 
 ## 6. Related paper
