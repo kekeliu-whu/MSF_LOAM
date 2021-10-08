@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0048 NEW)
 project(msf_loam_velodyne VERSION 0.0.1)
 

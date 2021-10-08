@@ -8,36 +8,31 @@
 #include "common/rigid_transform.h"
 #include "common/time_def.h"
 
+template <typename T>
 struct TimestampedPointCloud {
+  using PointCloudType    = pcl::PointCloud<T>;
+  using PointCloudTypePtr = typename PointCloudType::Ptr;
+
   Time timestamp;
   std::string frame_id;
   Rigid3d odom_pose;
   Rigid3d map_pose;
   Quaternion<double> imu_rotation;
 
-  PointCloudPtr cloud_full_res;
-  PointCloudPtr cloud_corner_sharp;
-  PointCloudPtr cloud_corner_less_sharp;
-  PointCloudPtr cloud_surf_flat;
-  PointCloudPtr cloud_surf_less_flat;
+  PointCloudTypePtr cloud_full_res;
+  PointCloudTypePtr cloud_corner_sharp;
+  PointCloudTypePtr cloud_corner_less_sharp;
+  PointCloudTypePtr cloud_surf_flat;
+  PointCloudTypePtr cloud_surf_less_flat;
 
   TimestampedPointCloud()
-      : imu_rotation(Quaternion<double>(1, 0, 0, 0)),
-        cloud_full_res(new PointCloud),
-        cloud_corner_sharp(new PointCloud),
-        cloud_corner_less_sharp(new PointCloud),
-        cloud_surf_flat(new PointCloud),
-        cloud_surf_less_flat(new PointCloud) {}
+      : imu_rotation(Quaterniond::Identity()),
+        cloud_full_res(new PointCloudType),
+        cloud_corner_sharp(new PointCloudType),
+        cloud_corner_less_sharp(new PointCloudType),
+        cloud_surf_flat(new PointCloudType),
+        cloud_surf_less_flat(new PointCloudType) {}
 };
-
-inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
-                                         const Rigid3d &pose) {
-  PointCloudPtr cloud_out(new PointCloud);
-  cloud_out->resize(cloud_in->size());
-  for (size_t i = 0; i < cloud_in->size(); ++i)
-    cloud_out->at(i) = pose * cloud_in->at(i);
-  return cloud_out;
-}
 
 struct OdometryData {
   Time timestamp;

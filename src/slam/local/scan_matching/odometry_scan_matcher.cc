@@ -16,12 +16,12 @@ constexpr double kNearByScan          = 2.5;
 constexpr int kOptimalNum             = 2;
 
 // undistort lidar point
-void TransformToStart(const PointType &pi, PointType &po,
+void TransformToStart(const PointTypeOriginal &pi, PointTypeOriginal &po,
                       const Rigid3d &transform_curr2last) {
   // interpolation ratio
   double s;
   if (DISTORTION)
-    s = (pi.intensity - int(pi.intensity)) / kScanPeriod;
+    s = pi.time / kScanPeriod;
   else
     s = 1.0;
   Eigen::Quaterniond q_point_last =
@@ -34,20 +34,27 @@ void TransformToStart(const PointType &pi, PointType &po,
   po.y         = un_point.y();
   po.z         = un_point.z();
   po.intensity = pi.intensity;
+  po.ring      = pi.ring;
+  po.time      = pi.time;
+}
+
+PointType ToTypePointXYZI(const PointTypeOriginal &p) {
+  PointType pt;
+  pcl::copyPoint(p, pt);
+  return pt;
 }
 
 }  // namespace
 
-bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
-                                const TimestampedPointCloud &scan_curr,
-                                Rigid3d *pose_estimate_curr2last) {
-  PointCloudConstPtr cloud_corner_sharp = scan_curr.cloud_corner_sharp;
-  PointCloudConstPtr cloud_corner_less_sharp =
-      scan_curr.cloud_corner_less_sharp;
-  PointCloudConstPtr cloud_surf_flat      = scan_curr.cloud_surf_flat;
-  PointCloudConstPtr cloud_surf_less_flat = scan_curr.cloud_surf_less_flat;
-  PointCloudConstPtr cloud_corner_last    = scan_last.cloud_corner_less_sharp;
-  PointCloudConstPtr cloud_surf_last      = scan_last.cloud_surf_less_flat;
+bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOriginal> &scan_last,
+                                         const TimestampedPointCloud<PointTypeOriginal> &scan_curr,
+                                         Rigid3d *pose_estimate_curr2last) {
+  auto cloud_corner_sharp      = scan_curr.cloud_corner_sharp;
+  auto cloud_corner_less_sharp = scan_curr.cloud_corner_less_sharp;
+  auto cloud_surf_flat         = scan_curr.cloud_surf_flat;
+  auto cloud_surf_less_flat    = scan_curr.cloud_surf_less_flat;
+  auto cloud_corner_last       = scan_last.cloud_corner_less_sharp;
+  auto cloud_surf_last         = scan_last.cloud_surf_less_flat;
 
   TicToc t_opt;
 
@@ -55,11 +62,11 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
   // less sharp 点构造的 kdtree
   pcl::KdTreeFLANN<PointType>::Ptr kdtree_corner_last(
       new pcl::KdTreeFLANN<PointType>());
-  kdtree_corner_last->setInputCloud(cloud_corner_last);
+  kdtree_corner_last->setInputCloud(ToTypePointXYZI(cloud_corner_last));
   // less flat 点构造的 kdtree
   pcl::KdTreeFLANN<PointType>::Ptr kdtree_surf_last(
       new pcl::KdTreeFLANN<PointType>());
-  kdtree_surf_last->setInputCloud(cloud_surf_last);
+  kdtree_surf_last->setInputCloud(ToTypePointXYZI(cloud_surf_last));
   LOG_STEP_TIME("ODO", "Build kdtree", t_kdtree.toc());
 
   for (size_t opti_counter = 0; opti_counter < kOptimalNum; ++opti_counter) {
@@ -76,7 +83,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
         q_parameterization);
     problem.AddParameterBlock(pose_estimate_curr2last->translation().data(), 3);
 
-    PointType pointSel;
+    PointTypeOriginal pointSel;
     std::vector<int> pointSearchInd;
     std::vector<float> pointSearchSqDis;
 
@@ -85,26 +92,24 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
     for (size_t i = 0; i < cloud_corner_sharp->size(); ++i) {
       TransformToStart(cloud_corner_sharp->points[i], pointSel,
                        *pose_estimate_curr2last);
-      kdtree_corner_last->nearestKSearch(pointSel, 1, pointSearchInd,
+      kdtree_corner_last->nearestKSearch(ToTypePointXYZI(pointSel), 1, pointSearchInd,
                                          pointSearchSqDis);
 
       int closestPointInd = -1, minPointInd2 = -1;
       if (pointSearchSqDis[0] < kDistanceSqThreshold) {
-        closestPointInd = pointSearchInd[0];
-        int closestPointScanID =
-            int(cloud_corner_last->points[closestPointInd].intensity);
+        closestPointInd        = pointSearchInd[0];
+        int closestPointScanID = cloud_corner_last->points[closestPointInd].ring;
 
         double minPointSqDis2 = kDistanceSqThreshold;
         // search in the direction of increasing scan line
         for (int j = closestPointInd + 1; j < (int)cloud_corner_last->size();
              ++j) {
           // if in the same scan line, continue
-          if (int(cloud_corner_last->points[j].intensity) <= closestPointScanID)
+          if (cloud_corner_last->points[j].ring <= closestPointScanID)
             continue;
 
           // if not in nearby scans, end the loop
-          if (int(cloud_corner_last->points[j].intensity) >
-              (closestPointScanID + kNearByScan))
+          if (cloud_corner_last->points[j].ring > closestPointScanID + kNearByScan)
             break;
 
           double pointSqDis =
@@ -125,12 +130,11 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
         // search in the direction of decreasing scan line
         for (int j = closestPointInd - 1; j >= 0; --j) {
           // if in the same scan line, continue
-          if (int(cloud_corner_last->points[j].intensity) >= closestPointScanID)
+          if (cloud_corner_last->points[j].ring >= closestPointScanID)
             continue;
 
           // if not in nearby scans, end the loop
-          if (int(cloud_corner_last->points[j].intensity) <
-              (closestPointScanID - kNearByScan))
+          if (cloud_corner_last->points[j].ring < closestPointScanID - kNearByScan)
             break;
 
           double pointSqDis =
@@ -163,9 +167,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
 
         double s;
         if (DISTORTION)
-          s = (cloud_corner_sharp->points[i].intensity -
-               int(cloud_corner_sharp->points[i].intensity)) /
-              kScanPeriod;
+          s = cloud_corner_sharp->points[i].time / kScanPeriod;
         else
           s = 1.0;
         ceres::CostFunction *cost_function =
@@ -182,7 +184,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
     for (size_t i = 0; i < cloud_surf_flat->size(); ++i) {
       TransformToStart(cloud_surf_flat->points[i], pointSel,
                        *pose_estimate_curr2last);
-      kdtree_surf_last->nearestKSearch(pointSel, 1, pointSearchInd,
+      kdtree_surf_last->nearestKSearch(ToTypePointXYZI(pointSel), 1, pointSearchInd,
                                        pointSearchSqDis);
 
       int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;
@@ -191,14 +193,14 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
 
         // get closest point's scan ID
         int closestPointScanID =
-            int(cloud_surf_last->points[closestPointInd].intensity);
+            cloud_surf_last->points[closestPointInd].ring;
         double minPointSqDis2 = kDistanceSqThreshold,
                minPointSqDis3 = kDistanceSqThreshold;
 
         // search in the direction of increasing scan line
         for (size_t j = closestPointInd + 1; j < cloud_surf_last->size(); ++j) {
           // if not in nearby scans, end the loop
-          if (int(cloud_surf_last->points[j].intensity) >
+          if (cloud_surf_last->points[j].ring >
               (closestPointScanID + kNearByScan))
             break;
 
@@ -210,14 +212,12 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
                                   (cloud_surf_last->points[j].z - pointSel.z);
 
           // if in the same or lower scan line
-          if (int(cloud_surf_last->points[j].intensity) <= closestPointScanID &&
-              pointSqDis < minPointSqDis2) {
+          if (cloud_surf_last->points[j].ring <= closestPointScanID && pointSqDis < minPointSqDis2) {
             minPointSqDis2 = pointSqDis;
             minPointInd2   = j;
           }
           // if in the higher scan line
-          else if (int(cloud_surf_last->points[j].intensity) >
-                       closestPointScanID &&
+          else if (cloud_surf_last->points[j].ring > closestPointScanID &&
                    pointSqDis < minPointSqDis3) {
             minPointSqDis3 = pointSqDis;
             minPointInd3   = j;
@@ -227,8 +227,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
         // search in the direction of decreasing scan line
         for (int j = closestPointInd - 1; j >= 0; --j) {
           // if not in nearby scans, end the loop
-          if (int(cloud_surf_last->points[j].intensity) <
-              (closestPointScanID - kNearByScan))
+          if (cloud_surf_last->points[j].ring < (closestPointScanID - kNearByScan))
             break;
 
           double pointSqDis = (cloud_surf_last->points[j].x - pointSel.x) *
@@ -239,12 +238,10 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
                                   (cloud_surf_last->points[j].z - pointSel.z);
 
           // if in the same or higher scan line
-          if (int(cloud_surf_last->points[j].intensity) >= closestPointScanID &&
-              pointSqDis < minPointSqDis2) {
+          if (cloud_surf_last->points[j].ring >= closestPointScanID && pointSqDis < minPointSqDis2) {
             minPointSqDis2 = pointSqDis;
             minPointInd2   = j;
-          } else if (int(cloud_surf_last->points[j].intensity) <
-                         closestPointScanID &&
+          } else if (cloud_surf_last->points[j].ring < closestPointScanID &&
                      pointSqDis < minPointSqDis3) {
             // find nearer point
             minPointSqDis3 = pointSqDis;
@@ -269,9 +266,7 @@ bool OdometryScanMatcher::Match(const TimestampedPointCloud &scan_last,
 
           double s;
           if (DISTORTION)
-            s = (cloud_surf_flat->points[i].intensity -
-                 int(cloud_surf_flat->points[i].intensity)) /
-                kScanPeriod;
+            s = cloud_surf_flat->points[i].time / kScanPeriod;
           else
             s = 1.0;
           ceres::CostFunction *cost_function = LidarPlaneFactor::Create(
