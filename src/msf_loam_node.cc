@@ -90,9 +90,9 @@ double g_min_range;               // 最小扫描距离
 int g_scan_num;                   // 扫描线数
 
 template <typename PointT>
-void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
-                                pcl::PointCloud<PointT> &cloud_out,
-                                double min_range) {
+void RemoveInvalidPointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
+                                  pcl::PointCloud<PointT> &cloud_out,
+                                  double min_range) {
   if (&cloud_in != &cloud_out) {
     cloud_out.header = cloud_in.header;
     cloud_out.resize(cloud_in.size());
@@ -101,7 +101,10 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
   size_t j = 0;
 
   for (size_t i = 0; i < cloud_in.size(); ++i) {
-    if (cloud_in[i].getVector3fMap().norm() < min_range) continue;
+    if (cloud_in[i].getVector3fMap().norm() < min_range ||
+        !std::isfinite(cloud_in[i].x) ||
+        !std::isfinite(cloud_in[i].y) ||
+        !std::isfinite(cloud_in[i].z)) continue;
     cloud_out[j] = cloud_in[i];
     j++;
   }
@@ -114,6 +117,21 @@ void RemoveClosePointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
   cloud_out.is_dense = true;
 }
 
+template <typename pointT>
+void VoxelGridWrapper(const pcl::PointCloud<pointT> &cloud_in, pcl::PointCloud<pointT> &cloud_out) {
+  PointCloudPtr cloud_in_without_rt{new PointCloud};
+  pcl::copyPointCloud(cloud_in, *cloud_in_without_rt);
+
+  PointCloud pc_out_without_rt;
+  pcl::VoxelGrid<PointType> downSizeFilter;
+  downSizeFilter.setInputCloud(cloud_in_without_rt);
+  downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
+  downSizeFilter.filter(pc_out_without_rt);
+  auto indices = downSizeFilter.getIndices();
+
+  pcl::copyPointCloud(cloud_in, *indices, cloud_out);
+}
+
 }  // namespace
 
 void HandleLaserCloudMessage(
@@ -124,19 +142,16 @@ void HandleLaserCloudMessage(
   std::vector<int> scan_start_indices(g_scan_num, 0);
   std::vector<int> scan_end_indices(g_scan_num, 0);
 
-  pcl::PointCloud<PointType> laser_cloud_in;
+  pcl::PointCloud<PointTypeOriginal> laser_cloud_in;
   pcl::fromROSMsg(*laser_cloud_msg, laser_cloud_in);
 
-  // 删除非法点
-  std::vector<int> indices;
-  pcl::removeNaNFromPointCloud(laser_cloud_in, laser_cloud_in, indices);
-  RemoveClosePointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
+  // 1. remove invalid points
+  RemoveInvalidPointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
+  // 2. compute point rel_time
   int cloudSize   = laser_cloud_in.size();
-  double startOri = -atan2(laser_cloud_in[0].y, laser_cloud_in[0].x);
-  double endOri =
-      -atan2(laser_cloud_in[cloudSize - 1].y, laser_cloud_in[cloudSize - 1].x) +
-      2 * M_PI;
+  double startOri = -atan2(laser_cloud_in.front().y, laser_cloud_in.front().x);
+  double endOri   = -atan2(laser_cloud_in.back().y, laser_cloud_in.back().x) + 2 * M_PI;
 
   if (endOri - startOri > 3 * M_PI) {
     endOri -= 2 * M_PI;
@@ -145,43 +160,10 @@ void HandleLaserCloudMessage(
   }
 
   bool halfPassed = false;
-  int count       = cloudSize;
-  PointType point;
-  std::vector<PointCloud> laserCloudScans(g_scan_num);
+  std::vector<PointCloudOriginal> laserCloudScans(g_scan_num);
   for (int i = 0; i < cloudSize; i++) {
-    point = laser_cloud_in[i];
-
-    // 计算scan_id
-    double angle = atan(point.z / sqrt(point.x * point.x + point.y * point.y)) *
-                   180 / M_PI;
-    int scanID = 0;
-
-    if (g_scan_num == 16) {
-      scanID = int((angle + 15) / 2 + 0.5);
-      if (scanID > (g_scan_num - 1) || scanID < 0) {
-        count--;
-        continue;
-      }
-    } else if (g_scan_num == 32) {
-      scanID = int((angle + 92.0 / 3.0) * 3.0 / 4.0);
-      if (scanID > (g_scan_num - 1) || scanID < 0) {
-        count--;
-        continue;
-      }
-    } else if (g_scan_num == 64) {
-      if (angle >= -8.83)
-        scanID = int((2 - angle) * 3.0 + 0.5);
-      else
-        scanID = g_scan_num / 2 + int((-8.83 - angle) * 2.0 + 0.5);
-
-      // use [0 50]  > 50 remove outlies
-      if (angle > 2 || angle < -24.33 || scanID > 50 || scanID < 0) {
-        count--;
-        continue;
-      }
-    } else {
-      LOG(FATAL) << "Wrong scan number:" << g_scan_num;
-    }
+    PointTypeOriginal point = laser_cloud_in[i];
+    CHECK_LT(point.ring, laserCloudScans.size());
 
     double ori = -atan2(point.y, point.x);
     if (!halfPassed) {
@@ -204,23 +186,21 @@ void HandleLaserCloudMessage(
     }
 
     // 密度的整数部分为scan_id，浮点部分为点在当前帧的时间偏移
-    double relTime  = (ori - startOri) / (endOri - startOri);
-    point.intensity = scanID + kScanPeriod * relTime;
-    laserCloudScans[scanID].push_back(point);
+    double rela_time = (ori - startOri) / (endOri - startOri);
+    point.time       = static_cast<float>(rela_time);
+    laserCloudScans[point.ring].push_back(point);
   }
-  LOG_IF(WARNING, cloudSize - count > 10)
-      << cloudSize - count << " invalid points without matching scan id!";
 
-  LOG(INFO) << "[REG] Cloud size: " << count;
+  LOG(INFO) << "[REG] Valid Cloud size: " << cloudSize;
 
-  PointCloudPtr laser_cloud(new PointCloud);
+  PointCloudOriginalPtr laser_cloud(new PointCloudOriginal);
   for (int i = 0; i < g_scan_num; i++) {
     scan_start_indices[i] = laser_cloud->size() + 5;
     *laser_cloud += laserCloudScans[i];
-    scan_end_indices[i] = laser_cloud->size() - 6;
+    scan_end_indices[i] = static_cast<int>(laser_cloud->size()) - 6;
   }
 
-  LOG_STEP_TIME("REG", "Re-index scans", t_prepare.toc());
+  LOG_STEP_TIME("REG", "Compute relative time for scan points", t_prepare.toc());
 
   std::size_t _N = laser_cloud->size();
   CHECK_GT(_N, 0);
@@ -267,16 +247,16 @@ void HandleLaserCloudMessage(
 
   TicToc t_pts;
 
-  PointCloudPtr cloud_corner_sharp(new PointCloud);       // sharp 点
-  PointCloudPtr cloud_corner_less_sharp(new PointCloud);  // less sharp 点
-  PointCloudPtr cloud_surf_flat(new PointCloud);          // flat 点
-  PointCloudPtr cloud_surf_less_flat(new PointCloud);     // less flat 点
+  PointCloudOriginalPtr cloud_corner_sharp(new PointCloudOriginal);       // sharp 点
+  PointCloudOriginalPtr cloud_corner_less_sharp(new PointCloudOriginal);  // less sharp 点
+  PointCloudOriginalPtr cloud_surf_flat(new PointCloudOriginal);          // flat 点
+  PointCloudOriginalPtr cloud_surf_less_flat(new PointCloudOriginal);     // less flat 点
 
   double t_q_sort = 0;
   // 提取每帧扫描线中的特征点
   for (int i = 0; i < g_scan_num; i++) {
     if (scan_end_indices[i] - scan_start_indices[i] < 6) continue;
-    PointCloudPtr surfPointsLessFlatScan(new PointCloud);
+    PointCloudOriginalPtr surfPointsLessFlatScan(new PointCloudOriginal);
     // 将每条扫描线分成6片，对每片提取特征点
     for (int j = 0; j < 6; j++) {
       int sp = scan_start_indices[i] +
@@ -370,18 +350,15 @@ void HandleLaserCloudMessage(
       }
     }
 
-    PointCloud surfPointsLessFlatScanDS;
-    pcl::VoxelGrid<PointType> downSizeFilter;
-    downSizeFilter.setInputCloud(surfPointsLessFlatScan);
-    downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
-    downSizeFilter.filter(surfPointsLessFlatScanDS);
+    PointCloudOriginal surfPointsLessFlatScanDS;
+    VoxelGridWrapper(*surfPointsLessFlatScan, surfPointsLessFlatScanDS);
 
     *cloud_surf_less_flat += surfPointsLessFlatScanDS;
   }
   LOG_STEP_TIME("REG", "Curvature sort", t_q_sort);
-  LOG_STEP_TIME("REG", "Seperate points", t_pts.toc());
+  LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
-  TimestampedPointCloud scan;
+  TimestampedPointCloud<PointTypeOriginal> scan;
   scan.timestamp               = FromRos(laser_cloud_msg->header.stamp);
   scan.cloud_full_res          = laser_cloud;
   scan.cloud_surf_less_flat    = cloud_surf_less_flat;

@@ -19,6 +19,15 @@ bool g_is_offline_mode;
 bool g_should_exit = false;
 proto::PbData pb_data;
 
+inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
+                                         const Rigid3d &pose) {
+  PointCloudPtr cloud_out(new PointCloud);
+  cloud_out->resize(cloud_in->size());
+  for (size_t i = 0; i < cloud_in->size(); ++i)
+    cloud_out->at(i) = pose * cloud_in->at(i);
+  return cloud_out;
+}
+
 }  // namespace
 
 LaserMapping::LaserMapping(bool is_offline_mode)
@@ -156,12 +165,12 @@ void LaserMapping::Run() {
               << ", surf=" << laserCloudSurfFromMap->size();
     if (laserCloudCornerFromMap->size() > 10 &&
         laserCloudSurfFromMap->size() > 50) {
-      TimestampedPointCloud cloud_map, scan_curr;
+      TimestampedPointCloud<PointType> cloud_map, scan_curr;
       cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
       cloud_map.cloud_surf_less_flat    = laserCloudSurfFromMap;
       scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
       scan_curr.cloud_surf_less_flat    = laserCloudSurfLastStack;
-      scan_matcher_->Match(cloud_map, scan_curr, &pose_map_scan2world_);
+      scan_matcher_->MatchScan2Map(cloud_map, scan_curr, &pose_map_scan2world_);
     } else {
       LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
     }
@@ -246,7 +255,7 @@ void LaserMapping::AddImu(const ImuData &imu_data) {
   *imu_msg->mutable_linear_acceleration() = ToProto(imu_data.linear_acceleration);
 }
 
-void LaserMapping::PublishScan(const TimestampedPointCloud &scan) {
+void LaserMapping::PublishScan(const TimestampedPointCloud<PointType> &scan) {
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*scan.cloud_full_res, laser_cloud_out_msg);
   laser_cloud_out_msg.header.stamp    = ToRos(scan.timestamp);

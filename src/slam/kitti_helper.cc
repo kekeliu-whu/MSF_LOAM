@@ -149,6 +149,7 @@ int main(int argc, char** argv) {
       point.y         = lidar_data[i + 1];
       point.z         = lidar_data[i + 2];
       point.intensity = lidar_data[i + 3];
+      // todo write scan ring here
       laser_cloud.push_back(point);
     }
 

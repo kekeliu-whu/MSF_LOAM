@@ -11,9 +11,13 @@
 
 class ScanMatcher {
  public:
-  virtual bool Match(const TimestampedPointCloud &cloud1,
-                     const TimestampedPointCloud &cloud2,
-                     Rigid3d *pose_estimate_2to1) = 0;
+  virtual bool MatchScan2Scan(const TimestampedPointCloud<PointTypeOriginal> &cloud1,
+                              const TimestampedPointCloud<PointTypeOriginal> &cloud2,
+                              Rigid3d *pose_estimate_curr2last) = 0;
+
+  virtual bool MatchScan2Map(const TimestampedPointCloud<PointType> &cloud1,
+                             const TimestampedPointCloud<PointType> &cloud2,
+                             Rigid3d *pose_estimate_map_scan2world) = 0;
 
   void RefinePoseByRejectOutliers(ceres::Problem &problem);
 
