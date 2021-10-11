@@ -6,8 +6,6 @@
 
 #include <glog/logging.h>
 #include <chrono>
-#include <cstdlib>
-#include <ctime>
 
 class TicToc {
   using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
@@ -29,4 +27,4 @@ class TicToc {
 };
 
 #define LOG_STEP_TIME(module, describe, msecs) \
-  LOG(INFO) << "[" << module << "] " describe << ": " << msecs << " ms"
+  LOG(INFO) << "[" << (module) << "] " describe << ": " << (msecs) << " ms"

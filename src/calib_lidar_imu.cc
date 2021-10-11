@@ -1,5 +1,5 @@
 #include <bits/stdint-uintn.h>
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <algorithm>
 #include <fstream>
 #include <iterator>

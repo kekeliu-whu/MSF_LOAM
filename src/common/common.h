@@ -43,10 +43,35 @@
 
 const std::string kTrajectoryPbPath = "/tmp/trajectory.pbstream";
 
+struct PointXYZIRT {
+  PCL_ADD_POINT4D
+  PCL_ADD_INTENSITY;
+  std::uint16_t ring;
+  float time;
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+} EIGEN_ALIGN16;
+
+// clang-format off
+POINT_CLOUD_REGISTER_POINT_STRUCT(
+  PointXYZIRT,
+  (float, x, x)
+  (float, y, y)
+  (float, z, z)
+  (float, intensity, intensity)
+  (std::uint16_t, ring, ring)
+//   (float, time, time) // todo read point with field time
+)
+// clang-format on
+
 using PointType          = pcl::PointXYZI;
-using PointCloud         = pcl::PointCloud<pcl::PointXYZI>;
+using PointCloud         = pcl::PointCloud<PointType>;
 using PointCloudPtr      = PointCloud::Ptr;
 using PointCloudConstPtr = PointCloud::ConstPtr;
+
+using PointTypeOriginal          = ::PointXYZIRT;
+using PointCloudOriginal         = pcl::PointCloud<PointTypeOriginal>;
+using PointCloudOriginalPtr      = PointCloudOriginal::Ptr;
+using PointCloudOriginalConstPtr = PointCloudOriginal::ConstPtr;
 
 using Vector3d    = Eigen::Vector3d;
 using Matrix3d    = Eigen::Matrix3d;

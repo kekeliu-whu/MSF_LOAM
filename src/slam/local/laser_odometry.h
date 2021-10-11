@@ -14,7 +14,7 @@ class LaserOdometry {
 
   ~LaserOdometry();
 
-  void AddLaserScan(TimestampedPointCloud scan_curr);
+  void AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_curr);
 
   void AddImu(const ImuData &imu_data);
 
@@ -28,7 +28,7 @@ class LaserOdometry {
   std::unique_ptr<ScanMatcher> scan_matcher_;
   std::queue<ImuData> imu_queue_;
 
-  TimestampedPointCloud scan_last_;
+  TimestampedPointCloud<PointTypeOriginal> scan_last_;
 
   // Transformation from scan to map
   Rigid3d pose_scan2world_;

@@ -14,7 +14,7 @@
 #include "slam/imu_fusion/imu_tracker.h"
 #include "slam/local/scan_matching/scan_matcher.h"
 
-using LaserOdometryResultType = TimestampedPointCloud;
+using LaserOdometryResultType = TimestampedPointCloud<PointType>;
 
 class LaserMapping {
  public:
@@ -32,7 +32,7 @@ class LaserMapping {
  private:
   void Run();
 
-  void PublishScan(const TimestampedPointCloud &scan);
+  void PublishScan(const TimestampedPointCloud<PointType> &scan);
 
   // set initial guess for pose
   void transformAssociateToMap() {
