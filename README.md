@@ -1,4 +1,4 @@
-# MSF_LOAM
+# MSF_LOAM [![ci](https://github.com/kekeliu-whu/MSF_LOAM/actions/workflows/ci.yml/badge.svg)](https://github.com/kekeliu-whu/MSF_LOAM/actions/workflows/ci.yml)
 
 [toc]
 
@@ -22,6 +22,10 @@ sudo apt install libceres-dev
 **PCL**
 ```shell
 sudo apt install libpcl-dev
+```
+**fmt**
+```shell
+sudo apt install libfmt-dev
 ```
 
 ## 2. Build MSF_LOAM
@@ -56,11 +60,15 @@ rosbag play ${YOUR_DATASET_FOLDER}/nsh_indoor_outdoor.bag
 
 Thanks for LOAM (J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time) and [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM).
 
-## 5. TODO
-For some reasons, this repo will be massively updated, aiming to add features as following:
+## 5. Features
+### DONE
+* Graph based LiDAR-GPS fusion
 * IMU extrinsic parameter estimation
-* IMU-LiDAR tightly-coupled localization and LiDAR scan undistortion by IMU preintegration
-* Loop closure by scan context
+* LiDAR-IMU loosely-coupled localization
+
+### TODO
+* LiDAR-IMU tightly-coupled localization and LiDAR scan undistortion by IMU preintegration
+* Loop closure by [scancontext](https://github.com/irapkaist/scancontext)
 * Online temporal calibration for system
 
 ## 6. Related paper
@@ -68,4 +76,3 @@ For some reasons, this repo will be massively updated, aiming to add features as
 * Qin, T., Li, P. and Shen, S., 2018. Vins-mono: A robust and versatile monocular visual-inertial state estimator. *IEEE Transactions on Robotics*, *34*(4), pp.1004-1020.
 * Qin, T. and Shen, S., 2018, October. Online temporal calibration for monocular visual-inertial systems. In *2018 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)* (pp. 3662-3669). IEEE.
 * Wu, Y., 2019. Formula Derivation and Analysis of the VINS-Mono. arXiv preprint arXiv:1912.11986.
-
