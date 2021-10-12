@@ -7,8 +7,14 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v2
     - uses: docker-practice/actions-setup-docker@master
     - run: |
         set -x
         docker version
         docker run --rm hello-world
+        pwd
+        mkdir build
+        docker run --rm -i -v $(pwd):/ws registry.cn-hangzhou.aliyuncs.com/c137/msf-loam-dev \
+          zsh -c \
+          'cd /ws/build/ && cmake .. && make -j $(nproc) && make test'
