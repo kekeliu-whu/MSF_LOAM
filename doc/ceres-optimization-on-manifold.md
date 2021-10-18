@@ -20,7 +20,7 @@ After some derivations, we get the Gauss-Newton equation as following (where $\D
 $$
 J^TJ\Delta x=-J^Tr
 $$
-So all we need to do is providing $r$ and $J$ to Ceres. Take a look at [ceres-autodiff-example](http://www.ceres-solver.org/nnls_tutorial.html#hello-world), where AutoDiffCostFunction computes Jacobian automaticly.
+So all we need to do is providing $r$ and $J$ to Ceres. Take a look at [ceres-autodiff-example](http://www.ceres-solver.org/nnls_tutorial.html#hello-world), where AutoDiffCostFunction computes Jacobian automatically.
 
 ### Local parameterization
 
@@ -58,7 +58,7 @@ private:
 
 #### Internal mechanism*
 
-The cost function jacobian $J_g$ denotes jacobian of residuals wrt. ambient space (see [above](#solve-the-problem-in-ceres)). The local parameterization jacobian $J_l$ is jacobian of ambient space wrt. tangent space. Then Ceres multiply $J_g$ and $J_l$ to get jacobian of redisuals wrt. tanget space, denoted as $J$ , use formula in [section above](#solve-the-problem-in-ceres) to get increasement in tanget space. Finally use `Plus` to apply tanget increasement to original paramter $x$.
+The cost function jacobian $J_g$ denotes jacobian of residuals wrt. ambient space (see [above](#solve-the-problem-in-ceres)). The local parameterization jacobian $J_l$ is jacobian of ambient space wrt. tangent space. Then Ceres multiply $J_g$ and $J_l$ to get jacobian of residuals wrt. tangent space, denoted as $J$ , use formula in [section above](#solve-the-problem-in-ceres) to get increasement in tangent space. Finally use `Plus` to apply tangent increasement to original parameter $x$.
 
 ## SE(3) perturbation model
 
@@ -80,7 +80,7 @@ public:
             jacobians[0]);
         // keypoint1:
         // jacobian of q * SO3::exp(x)  wrt. x at x=0
-        // that is the jacobian of redisual wrt tanget space
+        // that is the jacobian of residual wrt tangent space
         J.leftCols(3) = -(q.toRotationMatrix() * Skew(x_));
         J.rightCols(1).setZero();
       }
@@ -110,7 +110,7 @@ public:
   bool ComputeJacobian(const double *x, double *jacobian) const override {
     Eigen::Map<Eigen::Matrix<double, 4, 3, Eigen::RowMajor>> J(jacobian);
     // keypoint2:
-    // we've already got jacobian of rediduals to tanget space,
+    // we've already got jacobian of residuals to tangent space,
     // so local parameterization jacobian should be set to identity
     J.setIdentity();
     return true;
