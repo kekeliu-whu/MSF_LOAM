@@ -13,7 +13,7 @@
 class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
  public:
   IMUFactor() = delete;
-  IMUFactor(IntegrationBase *_pre_integration) : pre_integration(_pre_integration) {
+  IMUFactor(IntegrationBase *pre_integration) : pre_integration_(pre_integration) {
   }
   virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
     // P Q V Ba Bg are state to be estimated
@@ -44,30 +44,32 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
     Eigen::Map<Eigen::Matrix<double, 15, 1>> residual(residuals);
     // eq44
     // calculate residual, update jacobian matrix and covariance
-    residual = pre_integration->evaluate(Pi, Qi, Vi, Bai, Bgi,
-                                         Pj, Qj, Vj, Baj, Bgj);
+    residual = pre_integration_->evaluate(Pi, Qi, Vi, Bai, Bgi,
+                                          Pj, Qj, Vj, Baj, Bgj);
 
     // ceres take identity matrix as covariance
     // so we have to use llt decomposition for covariance, and then multiply it to the residual and Jacobian matrix respectively
-    Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration->covariance.inverse()).matrixL().transpose();
+    Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration_->covariance_.inverse()).matrixL().transpose();
     //sqrt_info.setIdentity();
     residual = sqrt_info * residual;
 
     if (jacobians) {
-      double sum_dt          = pre_integration->sum_dt;
-      Eigen::Matrix3d dp_dba = pre_integration->jacobian.template block<3, 3>(O_P, O_BA);
-      Eigen::Matrix3d dp_dbg = pre_integration->jacobian.template block<3, 3>(O_P, O_BG);
+      double sum_dt          = pre_integration_->sum_dt_;
+      Eigen::Matrix3d dp_dba = pre_integration_->jacobian_.template block<3, 3>(O_P, O_BA);
+      Eigen::Matrix3d dp_dbg = pre_integration_->jacobian_.template block<3, 3>(O_P, O_BG);
 
-      Eigen::Matrix3d dq_dbg = pre_integration->jacobian.template block<3, 3>(O_R, O_BG);
+      Eigen::Matrix3d dq_dbg = pre_integration_->jacobian_.template block<3, 3>(O_R, O_BG);
 
-      Eigen::Matrix3d dv_dba = pre_integration->jacobian.template block<3, 3>(O_V, O_BA);
-      Eigen::Matrix3d dv_dbg = pre_integration->jacobian.template block<3, 3>(O_V, O_BG);
+      Eigen::Matrix3d dv_dba = pre_integration_->jacobian_.template block<3, 3>(O_V, O_BA);
+      Eigen::Matrix3d dv_dbg = pre_integration_->jacobian_.template block<3, 3>(O_V, O_BG);
 
-      if (pre_integration->jacobian.maxCoeff() > 1e8 || pre_integration->jacobian.minCoeff() < -1e8) {
+      if (pre_integration_->jacobian_.maxCoeff() > 1e8 || pre_integration_->jacobian_.minCoeff() < -1e8) {
         ROS_WARN("numerical unstable in preintegration");
         //std::cout << pre_integration->jacobian << std::endl;
         ///                ROS_BREAK();
       }
+
+      Eigen::Quaterniond corrected_delta_q = pre_integration_->delta_q_ * Utility::deltaQ(dq_dbg * (Bgi - pre_integration_->linearized_bg_));
 
       // compute jacobians
       if (jacobians[0]) {
@@ -77,14 +79,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
 
         jacobian_pose_i.block<3, 3>(O_P, O_P) = -Qi.inverse().toRotationMatrix();
         jacobian_pose_i.block<3, 3>(O_P, O_R) = Utility::skewSymmetric(Qi.inverse() * (0.5 * G * sum_dt * sum_dt + Pj - Pi - Vi * sum_dt));
-
-#if 0
-            jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Qj.inverse() * Qi).toRotationMatrix();
-#else
-        // todo
-        Eigen::Quaterniond corrected_delta_q  = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
         jacobian_pose_i.block<3, 3>(O_R, O_R) = -(Utility::Qleft(Qj.inverse() * Qi) * Utility::Qright(corrected_delta_q)).bottomRightCorner<3, 3>();
-#endif
 
         jacobian_pose_i.block<3, 3>(O_V, O_R) = Utility::skewSymmetric(Qi.inverse() * (G * sum_dt + Vj - Vi));
 
@@ -107,10 +102,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
 #if 0
             jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -dq_dbg;
 #else
-        //Eigen::Quaterniond corrected_delta_q = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
-        //jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * corrected_delta_q).bottomRightCorner<3, 3>() * dq_dbg;
-        // todo
-        jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration->delta_q).bottomRightCorner<3, 3>() * dq_dbg;
+        // jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * corrected_delta_q).bottomRightCorner<3, 3>() * dq_dbg;
+        jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration_->delta_q_).bottomRightCorner<3, 3>() * dq_dbg;
 #endif
 
         jacobian_speedbias_i.block<3, 3>(O_V, O_V - O_V)  = -Qi.inverse().toRotationMatrix();
@@ -132,13 +125,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
 
         jacobian_pose_j.block<3, 3>(O_P, O_P) = Qi.inverse().toRotationMatrix();
 
-#if 0
-            jacobian_pose_j.block<3, 3>(O_R, O_R) = Eigen::Matrix3d::Identity();
-#else
-        // todo
-        Eigen::Quaterniond corrected_delta_q  = pre_integration->delta_q * Utility::deltaQ(dq_dbg * (Bgi - pre_integration->linearized_bg));
+        // jacobian_pose_j.block<3, 3>(O_R, O_R) = Eigen::Matrix3d::Identity();
         jacobian_pose_j.block<3, 3>(O_R, O_R) = Utility::Qleft(corrected_delta_q.inverse() * Qi.inverse() * Qj).bottomRightCorner<3, 3>();
-#endif
 
         jacobian_pose_j = sqrt_info * jacobian_pose_j;
 
@@ -164,5 +152,5 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
     return true;
   }
 
-  IntegrationBase *pre_integration;
+  IntegrationBase *pre_integration_;
 };
