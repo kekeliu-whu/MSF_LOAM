@@ -57,26 +57,22 @@ class Utility {
       const Eigen::QuaternionBase<Derived> &q) {
     Eigen::Quaternion<typename Derived::Scalar> qq = positify(q);
     Eigen::Matrix<typename Derived::Scalar, 4, 4> ans;
-    ans(0, 0)                      = qq.w();
-    ans.template block<1, 3>(0, 1) = -qq.vec().transpose();
-    ans.template block<3, 1>(1, 0) = qq.vec();
-    ans.template block<3, 3>(1, 1) =
-        qq.w() * Eigen::Matrix<typename Derived::Scalar, 3, 3>::Identity() +
-        skewSymmetric(qq.vec());
+    ans.template block<3, 3>(0, 0) = Eigen::Matrix3d::Identity() * qq.w() + skewSymmetric(qq.vec());
+    ans.template block<3, 1>(0, 3) = qq.vec();
+    ans.template block<1, 3>(3, 0) = -qq.vec();
+    ans(3, 3)                      = qq.w();
     return ans;
   }
 
   template <typename Derived>
   static Eigen::Matrix<typename Derived::Scalar, 4, 4> Qright(
-      const Eigen::QuaternionBase<Derived> &p) {
-    Eigen::Quaternion<typename Derived::Scalar> pp = positify(p);
+      const Eigen::QuaternionBase<Derived> &q) {
+    Eigen::Quaternion<typename Derived::Scalar> qq = positify(q);
     Eigen::Matrix<typename Derived::Scalar, 4, 4> ans;
-    ans(0, 0)                      = pp.w();
-    ans.template block<1, 3>(0, 1) = -pp.vec().transpose();
-    ans.template block<3, 1>(1, 0) = pp.vec();
-    ans.template block<3, 3>(1, 1) =
-        pp.w() * Eigen::Matrix<typename Derived::Scalar, 3, 3>::Identity() -
-        skewSymmetric(pp.vec());
+    ans.template block<3, 3>(0, 0) = Eigen::Matrix3d::Identity() * qq.w() - skewSymmetric(qq.vec());
+    ans.template block<3, 1>(0, 3) = qq.vec();
+    ans.template block<1, 3>(3, 0) = -qq.vec();
+    ans(3, 3)                      = qq.w();
     return ans;
   }
 };
