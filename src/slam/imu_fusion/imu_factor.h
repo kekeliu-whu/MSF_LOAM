@@ -69,6 +69,7 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
         ///                ROS_BREAK();
       }
 
+      // here we use corrected_delta_q instead of delta_q_
       Eigen::Quaterniond corrected_delta_q = pre_integration_->delta_q_ * Utility::deltaQ(dq_dbg * (Bgi - pre_integration_->linearized_bg_));
 
       // compute jacobians
@@ -102,8 +103,8 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
 #if 0
             jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -dq_dbg;
 #else
-        // jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * corrected_delta_q).topLeftCorner<3, 3>() * dq_dbg;
-        jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration_->delta_q_).topLeftCorner<3, 3>() * dq_dbg;
+        jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * corrected_delta_q).topLeftCorner<3, 3>() * dq_dbg;
+        // jacobian_speedbias_i.block<3, 3>(O_R, O_BG - O_V) = -Utility::Qleft(Qj.inverse() * Qi * pre_integration_->delta_q_).topLeftCorner<3, 3>() * dq_dbg;
 #endif
 
         jacobian_speedbias_i.block<3, 3>(O_V, O_V - O_V)  = -Qi.inverse().toRotationMatrix();
