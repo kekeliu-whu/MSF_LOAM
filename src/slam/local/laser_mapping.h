@@ -8,13 +8,14 @@
 #include <queue>
 #include <thread>
 
+#include "common/common.h"
 #include "common/timestamped_pointcloud.h"
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/hybrid_grid.h"
 #include "slam/imu_fusion/imu_tracker.h"
 #include "slam/local/scan_matching/scan_matcher.h"
 
-using LaserOdometryResultType = TimestampedPointCloud<PointType>;
+using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
 
 class LaserMapping {
  public:
@@ -32,7 +33,7 @@ class LaserMapping {
  private:
   void Run();
 
-  void PublishScan(const TimestampedPointCloud<PointType> &scan);
+  void PublishScan(const TimestampedPointCloud<PointTypeOriginal> &scan);
 
   // set initial guess for pose
   void transformAssociateToMap() {
