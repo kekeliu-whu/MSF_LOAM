@@ -132,6 +132,35 @@ void VoxelGridWrapper(const pcl::PointCloud<pointT> &cloud_in, pcl::PointCloud<p
   pcl::copyPointCloud(cloud_in, *indices, cloud_out);
 }
 
+void ComputeRelaTimeForEachPoint(const PointCloudOriginal &laser_cloud_in, std::vector<PointCloudOriginal> &cloud_with_relative_time) {
+  // lack of timestamp offset of first point/package.
+  // todo will cause if timestamp offset of first point/package is not tiny.
+  double start_ori = -atan2(laser_cloud_in.front().y, laser_cloud_in.front().x);
+
+  std::vector<double> last_relative_angles(cloud_with_relative_time.size(), -1);
+  for (int i = 0; i < laser_cloud_in.size(); i++) {
+    PointTypeOriginal point = laser_cloud_in[i];
+    CHECK_LT(point.ring, cloud_with_relative_time.size());
+
+    // ring point are not ordered in CCW
+    double ori = -atan2(point.y, point.x);
+
+    // clamp angle to [0, 2*pi)
+    double relative_angle = std::fmod(ori - start_ori + 2 * M_PI, 2 * M_PI);
+    // LOG(INFO) << point.ring << " " << relative_angle;
+
+    if (relative_angle < last_relative_angles[point.ring]) {
+      // relative_angle might be over 2*pi
+      relative_angle += 2 * M_PI;
+    }
+    last_relative_angles[point.ring] = relative_angle;
+
+    double rela_time = relative_angle / (2 * M_PI) * kScanPeriod;
+    point.time       = static_cast<float>(rela_time);
+    cloud_with_relative_time[point.ring].push_back(point);
+  }
+}
+
 }  // namespace
 
 void HandleLaserCloudMessage(
@@ -149,49 +178,11 @@ void HandleLaserCloudMessage(
   RemoveInvalidPointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
   // 2. compute point rel_time
-  int cloudSize   = laser_cloud_in.size();
-  double startOri = -atan2(laser_cloud_in.front().y, laser_cloud_in.front().x);
-  double endOri   = -atan2(laser_cloud_in.back().y, laser_cloud_in.back().x) + 2 * M_PI;
-
-  if (endOri - startOri > 3 * M_PI) {
-    endOri -= 2 * M_PI;
-  } else if (endOri - startOri < M_PI) {
-    endOri += 2 * M_PI;
-  }
-
-  bool halfPassed = false;
-  std::vector<PointCloudOriginal> laserCloudScans(g_scan_num);
-  for (int i = 0; i < cloudSize; i++) {
-    PointTypeOriginal point = laser_cloud_in[i];
-    CHECK_LT(point.ring, laserCloudScans.size());
-
-    double ori = -atan2(point.y, point.x);
-    if (!halfPassed) {
-      if (ori < startOri - M_PI / 2) {
-        ori += 2 * M_PI;
-      } else if (ori > startOri + M_PI * 3 / 2) {
-        ori -= 2 * M_PI;
-      }
-
-      if (ori - startOri > M_PI) {
-        halfPassed = true;
-      }
-    } else {
-      ori += 2 * M_PI;
-      if (ori < endOri - M_PI * 3 / 2) {
-        ori += 2 * M_PI;
-      } else if (ori > endOri + M_PI / 2) {
-        ori -= 2 * M_PI;
-      }
-    }
-
-    // 密度的整数部分为scan_id，浮点部分为点在当前帧的时间偏移
-    double rela_time = (ori - startOri) / (endOri - startOri);
-    point.time       = static_cast<float>(rela_time);
-    laserCloudScans[point.ring].push_back(point);
-  }
-
+  int cloudSize = laser_cloud_in.size();
   LOG(INFO) << "[REG] Valid Cloud size: " << cloudSize;
+
+  std::vector<PointCloudOriginal> laserCloudScans(g_scan_num);
+  ComputeRelaTimeForEachPoint(laser_cloud_in, laserCloudScans);
 
   PointCloudOriginalPtr laser_cloud(new PointCloudOriginal);
   for (int i = 0; i < g_scan_num; i++) {
