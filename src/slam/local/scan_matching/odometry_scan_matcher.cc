@@ -38,7 +38,7 @@ void TransformToStart(const PointTypeOriginal &pi, PointTypeOriginal &po,
   po.time      = pi.time;
 }
 
-PointType ToTypePointXYZI(const PointTypeOriginal &p) {
+PointType ToPointType(const PointTypeOriginal &p) {
   PointType pt;
   pcl::copyPoint(p, pt);
   return pt;
@@ -60,13 +60,11 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
 
   TicToc t_kdtree;
   // less sharp 点构造的 kdtree
-  pcl::KdTreeFLANN<PointType>::Ptr kdtree_corner_last(
-      new pcl::KdTreeFLANN<PointType>());
-  kdtree_corner_last->setInputCloud(ToTypePointXYZI(cloud_corner_last));
+  pcl::KdTreeFLANN<PointType>::Ptr kdtree_corner_last(new pcl::KdTreeFLANN<PointType>());
+  kdtree_corner_last->setInputCloud(ToPointType(cloud_corner_last));
   // less flat 点构造的 kdtree
-  pcl::KdTreeFLANN<PointType>::Ptr kdtree_surf_last(
-      new pcl::KdTreeFLANN<PointType>());
-  kdtree_surf_last->setInputCloud(ToTypePointXYZI(cloud_surf_last));
+  pcl::KdTreeFLANN<PointType>::Ptr kdtree_surf_last(new pcl::KdTreeFLANN<PointType>());
+  kdtree_surf_last->setInputCloud(ToPointType(cloud_surf_last));
   LOG_STEP_TIME("ODO", "Build kdtree", t_kdtree.toc());
 
   for (size_t opti_counter = 0; opti_counter < kOptimalNum; ++opti_counter) {
@@ -92,8 +90,7 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
     for (size_t i = 0; i < cloud_corner_sharp->size(); ++i) {
       TransformToStart(cloud_corner_sharp->points[i], pointSel,
                        *pose_estimate_curr2last);
-      kdtree_corner_last->nearestKSearch(ToTypePointXYZI(pointSel), 1, pointSearchInd,
-                                         pointSearchSqDis);
+      kdtree_corner_last->nearestKSearch(ToPointType(pointSel), 1, pointSearchInd, pointSearchSqDis);
 
       int closestPointInd = -1, minPointInd2 = -1;
       if (pointSearchSqDis[0] < kDistanceSqThreshold) {
@@ -102,8 +99,7 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
 
         double minPointSqDis2 = kDistanceSqThreshold;
         // search in the direction of increasing scan line
-        for (int j = closestPointInd + 1; j < (int)cloud_corner_last->size();
-             ++j) {
+        for (int j = closestPointInd + 1; j < (int)cloud_corner_last->size(); ++j) {
           // if in the same scan line, continue
           if (cloud_corner_last->points[j].ring <= closestPointScanID)
             continue;
@@ -184,7 +180,7 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
     for (size_t i = 0; i < cloud_surf_flat->size(); ++i) {
       TransformToStart(cloud_surf_flat->points[i], pointSel,
                        *pose_estimate_curr2last);
-      kdtree_surf_last->nearestKSearch(ToTypePointXYZI(pointSel), 1, pointSearchInd,
+      kdtree_surf_last->nearestKSearch(ToPointType(pointSel), 1, pointSearchInd,
                                        pointSearchSqDis);
 
       int closestPointInd = -1, minPointInd2 = -1, minPointInd3 = -1;

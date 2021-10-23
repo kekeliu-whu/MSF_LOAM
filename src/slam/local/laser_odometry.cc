@@ -102,7 +102,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_c
   laser_path_publisher_.publish(laser_path_);
 
   scan_curr.odom_pose = pose_scan2world_;
-  laser_mapper_handler_->AddLaserOdometryResult(ToTypePointXYZI(scan_curr));
+  laser_mapper_handler_->AddLaserOdometryResult(scan_curr);
 
   scan_last_ = scan_curr;
 

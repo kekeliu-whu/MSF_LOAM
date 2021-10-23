@@ -11,6 +11,7 @@
 #include "msg.pb.h"
 #include "slam/local/laser_mapping.h"
 #include "slam/local/scan_matching/mapping_scan_matcher.h"
+#include "slam/local/scan_matching/odometry_scan_matcher.h"
 #include "slam/msg_conversion.h"
 
 namespace {
@@ -132,10 +133,9 @@ void LaserMapping::Run() {
 
     // scan match
     // input: from odom
-    PointCloudConstPtr laserCloudCornerLast =
-        odom_result.cloud_corner_less_sharp;
-    PointCloudConstPtr laserCloudSurfLast = odom_result.cloud_surf_less_flat;
-    PointCloudConstPtr laserCloudFullRes  = odom_result.cloud_full_res;
+    PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
+    PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
+    PointCloudConstPtr laserCloudFullRes    = ToPointType(odom_result.cloud_full_res);
 
     pose_odom_scan2world_ = odom_result.odom_pose;
 
@@ -255,7 +255,7 @@ void LaserMapping::AddImu(const ImuData &imu_data) {
   *imu_msg->mutable_linear_acceleration() = ToProto(imu_data.linear_acceleration);
 }
 
-void LaserMapping::PublishScan(const TimestampedPointCloud<PointType> &scan) {
+void LaserMapping::PublishScan(const TimestampedPointCloud<PointTypeOriginal> &scan) {
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*scan.cloud_full_res, laser_cloud_out_msg);
   laser_cloud_out_msg.header.stamp    = ToRos(scan.timestamp);
