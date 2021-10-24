@@ -30,6 +30,7 @@ class IntegrationBase {
     noise_.block<3, 3>(9, 9)   = (GYR_N * GYR_N) * Eigen::Matrix3d::Identity();
     noise_.block<3, 3>(12, 12) = (ACC_W * ACC_W) * Eigen::Matrix3d::Identity();
     noise_.block<3, 3>(15, 15) = (GYR_W * GYR_W) * Eigen::Matrix3d::Identity();
+    AddResultToBuf();
   }
 
   void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr) {
@@ -50,6 +51,8 @@ class IntegrationBase {
     linearized_bg_ = linearized_bg;
     jacobian_.setIdentity();
     covariance_.setZero();
+    ClearResultBuf();
+    AddResultToBuf();
     for (int i = 0; i < static_cast<int>(dt_buf_.size()); i++) propagate(dt_buf_[i], acc_buf_[i], gyr_buf_[i]);
   }
 
@@ -152,6 +155,8 @@ class IntegrationBase {
     sum_dt_ += dt_;
     acc0_ = acc1_;
     gyr0_ = gyr1_;
+
+    AddResultToBuf();
   }
 
   Eigen::Matrix<double, 15, 1> evaluate(
@@ -210,6 +215,26 @@ class IntegrationBase {
   std::vector<Eigen::Vector3d> acc_buf_;
   std::vector<Eigen::Vector3d> gyr_buf_;
 
+  std::vector<double> sum_dt_buf_;
+  std::vector<Eigen::Vector3d> delta_p_buf_;
+  std::vector<Eigen::Quaterniond> delta_q_buf_;
+  std::vector<Eigen::Vector3d> delta_v_buf_;
+
   // IMU noise, including noise and random-walk-noise
   Eigen::Matrix<double, 18, 18> noise_;
+
+ private:
+  void AddResultToBuf() {
+    sum_dt_buf_.push_back(sum_dt_);
+    delta_p_buf_.push_back(delta_p_);
+    delta_q_buf_.push_back(delta_q_);
+    delta_v_buf_.push_back(delta_v_);
+  }
+
+  void ClearResultBuf() {
+    sum_dt_buf_.clear();
+    delta_p_buf_.clear();
+    delta_q_buf_.clear();
+    delta_v_buf_.clear();
+  }
 };
