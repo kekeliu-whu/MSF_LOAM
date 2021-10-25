@@ -30,6 +30,12 @@ class LaserMapping {
 
   void AddOdom(const OdometryData &odom_data);
 
+ public:
+  static void UndistortScan(
+      const LaserOdometryResultType &laser_odometry_result,
+      const std::vector<ImuData> &queue,
+      LaserOdometryResultType &laser_odometry_result_deskewed);
+
  private:
   void Run();
 
@@ -92,7 +98,7 @@ class LaserMapping {
   /**
    * IMU
    */
-  std::queue<ImuData> imu_queue_;
+  std::vector<ImuData> imu_buf_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H
