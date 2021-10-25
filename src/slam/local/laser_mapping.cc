@@ -4,11 +4,14 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/init.h>
 #include <tf/transform_broadcaster.h>
+#include <iterator>
 #include <random>
 
 #include "common/common.h"
 #include "common/time_def.h"
 #include "msg.pb.h"
+#include "slam/imu_fusion/integration_base.h"
+#include "slam/imu_fusion/scan_undistortion.h"
 #include "slam/local/laser_mapping.h"
 #include "slam/local/scan_matching/mapping_scan_matcher.h"
 #include "slam/local/scan_matching/odometry_scan_matcher.h"
@@ -17,7 +20,8 @@
 namespace {
 
 bool g_is_offline_mode;
-bool g_should_exit = false;
+bool g_should_exit   = false;
+bool g_is_firstframe = true;
 proto::PbData pb_data;
 
 inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
@@ -30,6 +34,11 @@ inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
 }
 
 }  // namespace
+
+// todo
+double ACC_N, ACC_W;
+double GYR_N, GYR_W;
+Eigen::Vector3d G;
 
 LaserMapping::LaserMapping(bool is_offline_mode)
     : gps_fusion_handler_(std::make_shared<GpsFusion>()),
@@ -96,7 +105,7 @@ void LaserMapping::AddLaserOdometryResult(
   odometry_result_queue_.push(laser_odometry_result);
   cv_.notify_one();
   // publish odom tf
-  // high frequence publish
+  // high frequency publish
   nav_msgs::Odometry aftmapped_odom;
   aftmapped_odom.child_frame_id  = "aft_mapped";
   aftmapped_odom.header.frame_id = "camera_init";
@@ -131,11 +140,42 @@ void LaserMapping::Run() {
       }
     }
 
+    LaserOdometryResultType odom_result_deskewed;
+    UndistortScan(odom_result, imu_buf_, odom_result_deskewed);
+    // todo add doc
+    std::swap(odom_result, odom_result_deskewed);
+
     // scan match
     // input: from odom
     PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
     PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
     PointCloudConstPtr laserCloudFullRes    = ToPointType(odom_result.cloud_full_res);
+
+    if (g_is_firstframe) {
+      // todo merge first frame process code
+      g_is_firstframe = false;
+      LOG(INFO) << "[MAP] Initializing ...";
+      PointCloudPtr laserCloudCornerLastStack(new PointCloud);
+      downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
+      downsize_filter_corner_.filter(*laserCloudCornerLastStack);
+
+      PointCloudPtr laserCloudSurfLastStack(new PointCloud);
+      downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
+      downsize_filter_surf_.filter(*laserCloudSurfLastStack);
+
+      TicToc t_add;
+
+      hybrid_grid_map_corner_.InsertScan(
+          TransformPointCloud(laserCloudCornerLastStack, pose_map_scan2world_),
+          downsize_filter_corner_);
+
+      hybrid_grid_map_surf_.InsertScan(
+          TransformPointCloud(laserCloudSurfLastStack, pose_map_scan2world_),
+          downsize_filter_surf_);
+
+      LOG_STEP_TIME("MAP", "add points", t_add.toc());
+      continue;
+    }
 
     pose_odom_scan2world_ = odom_result.odom_pose;
 
@@ -245,8 +285,28 @@ void LaserMapping::Run() {
   pb_data.SerializeToOstream(&ofs);
 }
 
+// todo add extrinsic parameter between imu and lidar
+void LaserMapping::UndistortScan(
+    const LaserOdometryResultType &laser_odometry_result,
+    const std::vector<ImuData> &imu_buf,
+    LaserOdometryResultType &laser_odometry_result_deskewed) {
+  auto it  = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.timestamp, [](const ImuData &imu, const Time &t) { return imu.time < t; });
+  auto idx = std::distance(imu_buf.begin(), it);
+  // todo add doc
+  auto imu_preintegration = std::make_unique<IntegrationBase>(imu_buf[idx].linear_acceleration, imu_buf[idx].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
+  imu_preintegration->push_back(ToSeconds(imu_buf[idx].time - laser_odometry_result.timestamp), imu_buf[idx].linear_acceleration, it->angular_velocity);
+  // todo sync imu_buf
+  for (; idx < imu_buf.size() - 1; ++idx) {
+    imu_preintegration->push_back(ToSeconds(imu_buf[idx + 1].time - imu_buf[idx].time), imu_buf[idx + 1].linear_acceleration, imu_buf[idx + 1].angular_velocity);
+  }
+  ScanUndistortionUtils::DoUndistort(laser_odometry_result, *imu_preintegration, laser_odometry_result_deskewed);
+  laser_odometry_result_deskewed.timestamp = laser_odometry_result.timestamp;
+  laser_odometry_result_deskewed.odom_pose = laser_odometry_result.odom_pose;
+  laser_odometry_result_deskewed.map_pose  = laser_odometry_result.map_pose;
+}
+
 void LaserMapping::AddImu(const ImuData &imu_data) {
-  imu_queue_.push(imu_data);
+  imu_buf_.push_back(imu_data);
 
   auto imu_msg = pb_data.add_imu_datas();
   imu_msg->set_timestamp(ToUniversal(imu_data.time));

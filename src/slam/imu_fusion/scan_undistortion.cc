@@ -25,7 +25,7 @@ void UndistortScanInternal(
 
 }  // namespace
 
-void ScanUndistortion::UndistortScan(
+void ScanUndistortionUtils::DoUndistort(
     const TimestampedPointCloud<PointTypeOriginal> &scan_in,
     const IntegrationBase &imu_integration,
     TimestampedPointCloud<PointTypeOriginal> &scan_out) {

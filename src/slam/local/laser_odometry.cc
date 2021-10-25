@@ -71,12 +71,10 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_c
   if (scan_last_.cloud_full_res->empty()) {
     LOG(INFO) << "[ODO] Initializing ...";
   } else {
-    // pose_curr2last_.rotation() =
-    // scan_last_.imu_rotation * scan_curr.imu_rotation.inverse();
     scan_matcher_->MatchScan2Scan(scan_last_, scan_curr, &pose_curr2last_);
 
-    LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
-    LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
+    // LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
+    // LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
     pose_scan2world_ = pose_scan2world_ * pose_curr2last_;
   }
 
