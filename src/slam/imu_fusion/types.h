@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/time_def.h"
+#include "common/time.h"
 #include <Eigen/Eigen>
 
 struct ImuData {

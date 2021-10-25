@@ -1,4 +1,5 @@
 #include <ceres/ceres.h>
+#include <pcl/common/copy_point.h>
 #include <pcl/kdtree/kdtree_flann.h>
 #include <sstream>
 #include <string>
@@ -16,32 +17,24 @@ constexpr double kNearByScan          = 2.5;
 constexpr int kOptimalNum             = 2;
 
 // undistort lidar point
-void TransformToStart(const PointTypeOriginal &pi, PointTypeOriginal &po,
+void TransformToStart(const PointTypeOriginal &point_in, PointTypeOriginal &point_out,
                       const Rigid3d &transform_curr2last) {
   // interpolation ratio
-  double s;
-  if (DISTORTION)
-    s = pi.time / kScanPeriod;
-  else
-    s = 1.0;
+  double s = 1.0;
   Eigen::Quaterniond q_point_last =
       Eigen::Quaterniond::Identity().slerp(s, transform_curr2last.rotation());
   Eigen::Vector3d t_point_last = s * transform_curr2last.translation();
-  Eigen::Vector3d point(pi.x, pi.y, pi.z);
+  Eigen::Vector3d point(point_in.x, point_in.y, point_in.z);
   Eigen::Vector3d un_point = q_point_last * point + t_point_last;
 
-  po.x         = un_point.x();
-  po.y         = un_point.y();
-  po.z         = un_point.z();
-  po.intensity = pi.intensity;
-  po.ring      = pi.ring;
-  po.time      = pi.time;
+  pcl::copyPoint(point_in, point_out);
+  point_out.getVector3fMap() = un_point.cast<float>();
 }
 
-PointType ToPointType(const PointTypeOriginal &p) {
-  PointType pt;
-  pcl::copyPoint(p, pt);
-  return pt;
+PointType ToPointType(const PointTypeOriginal &point_in) {
+  PointType point_out;
+  pcl::copyPoint(point_in, point_out);
+  return point_out;
 }
 
 }  // namespace
@@ -161,11 +154,7 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
                                      cloud_corner_last->points[minPointInd2].y,
                                      cloud_corner_last->points[minPointInd2].z);
 
-        double s;
-        if (DISTORTION)
-          s = cloud_corner_sharp->points[i].time / kScanPeriod;
-        else
-          s = 1.0;
+        double s = 1.0;
         ceres::CostFunction *cost_function =
             LidarEdgeFactor::Create(curr_point, last_point_a, last_point_b, s);
         problem.AddResidualBlock(
@@ -260,11 +249,7 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
                                        cloud_surf_last->points[minPointInd3].y,
                                        cloud_surf_last->points[minPointInd3].z);
 
-          double s;
-          if (DISTORTION)
-            s = cloud_surf_flat->points[i].time / kScanPeriod;
-          else
-            s = 1.0;
+          double s                           = 1.0;
           ceres::CostFunction *cost_function = LidarPlaneFactor::Create(
               curr_point, last_point_a, last_point_b, last_point_c, s);
           problem.AddResidualBlock(

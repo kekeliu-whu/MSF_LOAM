@@ -18,6 +18,7 @@ void UndistortScanInternal(
     double scale           = (p.time - sum_dt_buf[idx]) / (sum_dt_buf[idx + 1] - sum_dt_buf[idx]);
     auto q                 = imu_integration.delta_q_buf_[idx].slerp(scale, imu_integration.delta_q_buf_[idx + 1]);
     auto p_out             = p;
+    // todo what is q
     p_out.getVector3fMap() = q.cast<float>() * p.getVector3fMap();
     cloud_out->push_back(p_out);
   }

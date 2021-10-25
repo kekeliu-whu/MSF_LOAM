@@ -43,7 +43,7 @@ catkin_package(
 
 set(
     PROJECT_SRCS
-    src/common/time_def.cc
+    src/common/time.cc
     src/slam/hybrid_grid.cc
     src/slam/imu_fusion/initial_ex_rotation.cc
     src/slam/imu_fusion/pose_local_parameterization.cc

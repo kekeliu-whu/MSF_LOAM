@@ -4,7 +4,7 @@
 #include <common/rigid_transform.h>
 #include <vector>
 
-#include "common/time_def.h"
+#include "common/time.h"
 
 struct FixedPoint {
   Time timestamp;

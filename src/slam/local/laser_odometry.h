@@ -14,11 +14,14 @@ class LaserOdometry {
 
   ~LaserOdometry();
 
-  void AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_curr);
+  void AddLaserScan(const TimestampedPointCloud<PointTypeOriginal> &scan_curr);
 
   void AddImu(const ImuData &imu_data);
 
   void AddOdom(const OdometryData &odom_data);
+
+ private:
+  void PublishTrajectory(const TimestampedPointCloud<PointTypeOriginal> &scan_curr);
 
  private:
   std::shared_ptr<LaserMapping> laser_mapper_handler_;

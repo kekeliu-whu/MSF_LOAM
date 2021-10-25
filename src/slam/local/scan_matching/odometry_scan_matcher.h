@@ -36,9 +36,8 @@ inline PointCloud ToPointType(const PointCloudOriginal &pc_in) {
 
 inline TimestampedPointCloud<PointType> ToPointType(const TimestampedPointCloud<PointTypeOriginal> &tpc_in) {
   TimestampedPointCloud<PointType> tpc_out;
-  tpc_out.imu_rotation            = tpc_in.imu_rotation;
   tpc_out.frame_id                = tpc_in.frame_id;
-  tpc_out.timestamp               = tpc_in.timestamp;
+  tpc_out.time               = tpc_in.time;
   tpc_out.map_pose                = tpc_in.map_pose;
   tpc_out.odom_pose               = tpc_in.odom_pose;
   tpc_out.cloud_full_res          = ToPointType(tpc_in.cloud_full_res);
