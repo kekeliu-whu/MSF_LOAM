@@ -246,9 +246,8 @@ void LaserMapping::Run() {
 }
 
 void LaserMapping::AddImu(const ImuData &imu_data) {
-  // TODO
-  // calib imu and lidar
-  // LOG(FATAL) << "AddIMU not implemented yet.";
+  imu_queue_.push(imu_data);
+
   auto imu_msg = pb_data.add_imu_datas();
   imu_msg->set_timestamp(ToUniversal(imu_data.time));
   *imu_msg->mutable_angular_velocity()    = ToProto(imu_data.angular_velocity);

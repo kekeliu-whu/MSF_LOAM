@@ -54,7 +54,6 @@
 
 #include "common/common.h"
 #include "common/tic_toc.h"
-#include "slam/imu_fusion/imu_tracker.h"
 #include "slam/local/laser_odometry.h"
 #include "slam/msg_conversion.h"
 
@@ -88,6 +87,8 @@ const int kDefaultScanNum = 16;
 const double kScanPeriod  = 0.1;  // 扫描周期
 double g_min_range;               // 最小扫描距离
 int g_scan_num;                   // 扫描线数
+int g_imu_msgs_num = 0;
+sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
 
 template <typename PointT>
 void RemoveInvalidPointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
@@ -163,7 +164,7 @@ void ComputeRelaTimeForEachPoint(const PointCloudOriginal &laser_cloud_in, std::
 
 }  // namespace
 
-void HandleLaserCloudMessage(
+void RealHandleLaserCloudMessage(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   TicToc t_whole;
@@ -363,9 +364,24 @@ void HandleLaserCloudMessage(
       << "Scan registration process over 100ms";
 }
 
+void TryHandleLaserCloudMessageWithImuIntegrated(
+    const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
+    const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
+  if (g_imu_msgs_num == 0) {
+    LOG(WARNING) << "Waiting for imu data...";
+    return;
+  }
+  if (g_prev_laser_cloud_msgs) {
+    // delay to handle laser message for retrieving imu data
+    RealHandleLaserCloudMessage(g_prev_laser_cloud_msgs, laser_odometry_handler);
+  }
+  g_prev_laser_cloud_msgs = laser_cloud_msg;
+}
+
 void HandleImuMessage(
     const sensor_msgs::ImuConstPtr &imu_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
+  g_imu_msgs_num++;
   ImuData imu_data;
   imu_data.time = FromRos(imu_msg->header.stamp);
   imu_data.linear_acceleration << imu_msg->linear_acceleration.x,
@@ -414,8 +430,8 @@ int main(int argc, char **argv) {
     LOG(INFO) << "Reading bag file " << FLAGS_bag_filename << " ...";
     for (auto &m : rosbag::View(bag)) {
       if (m.isType<sensor_msgs::PointCloud2>()) {
-        HandleLaserCloudMessage(m.instantiate<sensor_msgs::PointCloud2>(),
-                                laser_odometry_handler);
+        TryHandleLaserCloudMessageWithImuIntegrated(m.instantiate<sensor_msgs::PointCloud2>(),
+                                                    laser_odometry_handler);
       } else if (m.isType<sensor_msgs::Imu>()) {
         HandleImuMessage(m.instantiate<sensor_msgs::Imu>(),
                          laser_odometry_handler);
@@ -427,10 +443,10 @@ int main(int argc, char **argv) {
     bag.close();
   } else {
     LOG_IF(WARNING, !FLAGS_bag_filename.empty())
-        << "Offline mode is on, so bag_filename will be ignored.";
+        << "Online mode is enabled, so the parameter 'bag_filename' will be ignored.";
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
         "/velodyne_points", 10,
-        boost::bind(HandleLaserCloudMessage, _1,
+        boost::bind(TryHandleLaserCloudMessageWithImuIntegrated, _1,
                     boost::ref(laser_odometry_handler)));
     ros::Subscriber subImu = nh.subscribe<sensor_msgs::Imu>(
         "/imu", 10,

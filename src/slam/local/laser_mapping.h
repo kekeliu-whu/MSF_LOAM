@@ -12,7 +12,7 @@
 #include "common/timestamped_pointcloud.h"
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/hybrid_grid.h"
-#include "slam/imu_fusion/imu_tracker.h"
+#include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/scan_matcher.h"
 
 using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
@@ -88,6 +88,11 @@ class LaserMapping {
   nav_msgs::Path aftmapped_path_;
 
   tf::TransformBroadcaster transform_broadcaster_;
+
+  /**
+   * IMU
+   */
+  std::queue<ImuData> imu_queue_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H
