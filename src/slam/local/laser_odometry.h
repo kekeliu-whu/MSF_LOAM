@@ -5,7 +5,7 @@
 
 #include "common/timestamped_pointcloud.h"
 #include "laser_mapping.h"
-#include "slam/imu_fusion/imu_tracker.h"
+#include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/scan_matcher.h"
 
 class LaserOdometry {
@@ -20,13 +20,9 @@ class LaserOdometry {
 
   void AddOdom(const OdometryData &odom_data);
 
-  std::unique_ptr<Quaternion<double>> AdvanceImuTracker(const Time &time);
-
  private:
   std::shared_ptr<LaserMapping> laser_mapper_handler_;
-  std::unique_ptr<ImuTracker> imu_tracker_;
   std::unique_ptr<ScanMatcher> scan_matcher_;
-  std::queue<ImuData> imu_queue_;
 
   TimestampedPointCloud<PointTypeOriginal> scan_last_;
 

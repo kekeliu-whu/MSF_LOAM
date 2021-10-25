@@ -66,11 +66,6 @@ LaserOdometry::LaserOdometry(bool is_offline_mode)
 LaserOdometry::~LaserOdometry() { LOG(INFO) << "LaserOdometry finished."; }
 
 void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_curr) {
-  auto rotation = AdvanceImuTracker(scan_curr.timestamp);
-  if (rotation) {
-    scan_curr.imu_rotation = *rotation;
-  }
-
   TicToc t_whole;
   // initializing
   if (scan_last_.cloud_full_res->empty()) {
@@ -112,30 +107,7 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_c
 }
 
 void LaserOdometry::AddImu(const ImuData &imu_data) {
-  // estimate rotation_delta
-  if (!imu_tracker_) {
-    LOG(INFO) << "Initializing imu tracker ...";
-    imu_tracker_.reset(new ImuTracker(10, imu_data.time));
-    imu_tracker_->AddImuObservation(imu_data);
-    imu_tracker_->Advance(imu_data.time);
-  }
-  CHECK(imu_queue_.empty() || imu_data.time > imu_queue_.back().time);
-  imu_queue_.push(imu_data);
   laser_mapper_handler_->AddImu(imu_data);
-}
-
-std::unique_ptr<Quaternion<double>> LaserOdometry::AdvanceImuTracker(
-    const Time &time) {
-  if (!imu_tracker_ || time < imu_tracker_->time()) return nullptr;
-  while (!imu_queue_.empty() && imu_queue_.front().time <= time) {
-    imu_tracker_->AddImuObservation(imu_queue_.front());
-    imu_tracker_->Advance(imu_queue_.front().time);
-    imu_queue_.pop();
-  }
-  imu_tracker_->Advance(time);
-  std::unique_ptr<Quaternion<double>> r(new Quaternion<double>);
-  *r = imu_tracker_->orientation();
-  return r;
 }
 
 void LaserOdometry::AddOdom(const OdometryData &odom_data) {
