@@ -39,8 +39,6 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 
-#define DISTORTION 0
-
 const std::string kTrajectoryPbPath = "/tmp/trajectory.pbstream";
 
 struct PointXYZIRT {

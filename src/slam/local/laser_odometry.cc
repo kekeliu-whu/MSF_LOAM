@@ -65,7 +65,7 @@ LaserOdometry::LaserOdometry(bool is_offline_mode)
 
 LaserOdometry::~LaserOdometry() { LOG(INFO) << "LaserOdometry finished."; }
 
-void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_curr) {
+void LaserOdometry::AddLaserScan(const TimestampedPointCloud<PointTypeOriginal> &scan_curr) {
   TicToc t_whole;
   // initializing
   if (scan_last_.cloud_full_res->empty()) {
@@ -78,24 +78,13 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_c
     pose_scan2world_ = pose_scan2world_ * pose_curr2last_;
   }
 
-  // publish odometry
-  nav_msgs::Odometry laserOdometry;
-  laserOdometry.header.frame_id = "camera_init";
-  laserOdometry.child_frame_id  = "laser_odom";
-  laserOdometry.header.stamp    = ToRos(scan_curr.timestamp);
-  laserOdometry.pose            = ToRos(pose_scan2world_);
-  laser_odom_publisher_.publish(laserOdometry);
+  // publish odometry trajectory
+  auto scan_curr_with_odom_pose      = scan_curr;
+  scan_curr_with_odom_pose.odom_pose = pose_scan2world_;
 
-  geometry_msgs::PoseStamped laserPose;
-  laserPose.header         = laserOdometry.header;
-  laserPose.pose           = laserOdometry.pose.pose;
-  laser_path_.header.stamp = laserOdometry.header.stamp;
-  laser_path_.poses.push_back(laserPose);
-  laser_path_.header.frame_id = "camera_init";
-  laser_path_publisher_.publish(laser_path_);
+  PublishTrajectory(scan_curr_with_odom_pose);
 
-  scan_curr.odom_pose = pose_scan2world_;
-  laser_mapper_handler_->AddLaserOdometryResult(scan_curr);
+  laser_mapper_handler_->AddLaserOdometryResult(scan_curr_with_odom_pose);
 
   scan_last_ = scan_curr;
 
@@ -110,4 +99,21 @@ void LaserOdometry::AddImu(const ImuData &imu_data) {
 
 void LaserOdometry::AddOdom(const OdometryData &odom_data) {
   laser_mapper_handler_->AddOdom(odom_data);
+}
+
+void LaserOdometry::PublishTrajectory(const TimestampedPointCloud<PointTypeOriginal> &scan_curr) {
+  nav_msgs::Odometry laserOdometry;
+  laserOdometry.header.frame_id = "camera_init";
+  laserOdometry.child_frame_id  = "laser_odom";
+  laserOdometry.header.stamp    = ToRos(scan_curr.time);
+  laserOdometry.pose            = ToRos(scan_curr.odom_pose);
+  laser_odom_publisher_.publish(laserOdometry);
+
+  geometry_msgs::PoseStamped laserPose;
+  laserPose.header            = laserOdometry.header;
+  laserPose.pose              = laserOdometry.pose.pose;
+  laser_path_.header.stamp    = laserOdometry.header.stamp;
+  laser_path_.header.frame_id = "camera_init";
+  laser_path_.poses.push_back(laserPose);
+  laser_path_publisher_.publish(laser_path_);
 }

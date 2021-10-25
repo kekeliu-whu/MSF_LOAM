@@ -351,7 +351,7 @@ void RealHandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
   TimestampedPointCloud<PointTypeOriginal> scan;
-  scan.timestamp               = FromRos(laser_cloud_msg->header.stamp);
+  scan.time               = FromRos(laser_cloud_msg->header.stamp);
   scan.cloud_full_res          = laser_cloud;
   scan.cloud_surf_less_flat    = cloud_surf_less_flat;
   scan.cloud_surf_flat         = cloud_surf_flat;

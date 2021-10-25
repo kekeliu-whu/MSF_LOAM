@@ -10,6 +10,7 @@
 
 #include "common/common.h"
 #include "common/timestamped_pointcloud.h"
+#include "msg.pb.h"
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/hybrid_grid.h"
 #include "slam/imu_fusion/types.h"
@@ -38,6 +39,8 @@ class LaserMapping {
 
  private:
   void Run();
+
+  void PublishTrajectory(const LaserOdometryResultType &scan);
 
   void PublishScan(const TimestampedPointCloud<PointTypeOriginal> &scan);
 
@@ -99,6 +102,12 @@ class LaserMapping {
    * IMU
    */
   std::vector<ImuData> imu_buf_;
+
+  bool is_offline_mode_;
+  bool is_firstframe_;
+  bool should_exit_;
+
+  proto::PbData pb_data_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H
