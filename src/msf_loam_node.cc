@@ -39,7 +39,6 @@
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
 #include <rosbag/bag.h>
@@ -47,10 +46,6 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <Eigen/Eigen>
-#include <cmath>
-#include <pcl/impl/point_types.hpp>
-#include <string>
-#include <vector>
 
 #include "common/common.h"
 #include "common/tic_toc.h"
@@ -87,7 +82,7 @@ const int kDefaultScanNum = 16;
 const double kScanPeriod  = 0.1;  // 扫描周期
 double g_min_range;               // 最小扫描距离
 int g_scan_num;                   // 扫描线数
-int g_imu_msgs_num = 0;
+std::uint64_t g_imu_msgs_num = 0;
 sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
 
 template <typename PointT>
@@ -351,7 +346,7 @@ void RealHandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
   TimestampedPointCloud<PointTypeOriginal> scan;
-  scan.time               = FromRos(laser_cloud_msg->header.stamp);
+  scan.time                    = FromRos(laser_cloud_msg->header.stamp);
   scan.cloud_full_res          = laser_cloud;
   scan.cloud_surf_less_flat    = cloud_surf_less_flat;
   scan.cloud_surf_flat         = cloud_surf_flat;
@@ -367,7 +362,8 @@ void RealHandleLaserCloudMessage(
 void TryHandleLaserCloudMessageWithImuIntegrated(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
-  if (g_imu_msgs_num == 0) {
+  // todo remove magic number
+  if (g_imu_msgs_num <= 200) {
     LOG(WARNING) << "Waiting for imu data...";
     return;
   }
