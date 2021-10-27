@@ -18,7 +18,6 @@ void UndistortScanInternal(
     double scale           = (p.time - sum_dt_buf[idx]) / (sum_dt_buf[idx + 1] - sum_dt_buf[idx]);
     auto q                 = imu_integration.delta_q_buf_[idx].slerp(scale, imu_integration.delta_q_buf_[idx + 1]);
     auto p_out             = p;
-    // todo what is q
     p_out.getVector3fMap() = q.cast<float>() * p.getVector3fMap();
     cloud_out->push_back(p_out);
   }
@@ -30,6 +29,9 @@ void ScanUndistortionUtils::DoUndistort(
     const TimestampedPointCloud<PointTypeOriginal> &scan_in,
     const IntegrationBase &imu_integration,
     TimestampedPointCloud<PointTypeOriginal> &scan_out) {
+  scan_out.time      = scan_in.time;
+  scan_out.odom_pose = scan_in.odom_pose;
+  scan_out.map_pose  = scan_in.map_pose;
   UndistortScanInternal(scan_in.cloud_full_res, imu_integration, scan_out.cloud_full_res);
   UndistortScanInternal(scan_in.cloud_corner_sharp, imu_integration, scan_out.cloud_corner_sharp);
   UndistortScanInternal(scan_in.cloud_corner_less_sharp, imu_integration, scan_out.cloud_corner_less_sharp);

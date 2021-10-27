@@ -31,13 +31,12 @@ class LaserMapping {
 
   void AddOdom(const OdometryData &odom_data);
 
- public:
+ private:
   static void UndistortScan(
       const LaserOdometryResultType &laser_odometry_result,
       const std::vector<ImuData> &queue,
       LaserOdometryResultType &laser_odometry_result_deskewed);
 
- private:
   void Run();
 
   void PublishTrajectory(const LaserOdometryResultType &scan);
@@ -84,6 +83,7 @@ class LaserMapping {
    */
 
   ros::Publisher cloud_scan_publisher_;
+  ros::Publisher cloud_scan_origin_publisher_;
   ros::Publisher cloud_corner_publisher_;
   ros::Publisher cloud_corner_less_publisher_;
   ros::Publisher cloud_surf_publisher_;

@@ -122,4 +122,11 @@ inline PointType operator*(const Rigid3d& transform, const PointType& point) {
   return point_out;
 }
 
+inline PointTypeOriginal operator*(const Rigid3d& transform, const PointTypeOriginal& point) {
+  PointTypeOriginal point_out = point;
+  point_out.getVector3fMap() =
+      (transform * point.getVector3fMap().cast<double>()).cast<float>();
+  return point_out;
+}
+
 #endif  // LOAM_VELODYNE_RIGID_TRANSFORM_H
