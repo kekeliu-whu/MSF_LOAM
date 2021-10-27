@@ -1,11 +1,11 @@
 #include <common/tic_toc.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <pcl/io/ply_io.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/init.h>
 #include <tf/transform_broadcaster.h>
 #include <iterator>
-#include <random>
 
 #include "common/common.h"
 #include "common/time.h"
@@ -19,9 +19,13 @@
 
 namespace {
 
-inline PointCloudPtr TransformPointCloud(const PointCloudConstPtr &cloud_in,
-                                         const Rigid3d &pose) {
-  PointCloudPtr cloud_out(new PointCloud);
+const bool kEnableMapSave = false;
+PointCloudOriginalPtr g_cloud_all(new PointCloudOriginal);
+
+template <typename T>
+inline typename pcl::PointCloud<T>::Ptr TransformPointCloud(const typename pcl::PointCloud<T>::ConstPtr &cloud_in,
+                                                            const Rigid3d &pose) {
+  typename pcl::PointCloud<T>::Ptr cloud_out(new pcl::PointCloud<T>);
   cloud_out->resize(cloud_in->size());
   for (size_t i = 0; i < cloud_in->size(); ++i)
     cloud_out->at(i) = pose * cloud_in->at(i);
@@ -63,13 +67,15 @@ LaserMapping::LaserMapping(bool is_offline_mode)
   downsize_filter_surf_.setLeafSize(plane_res, plane_res, plane_res);
 
   // set publishers
-  cloud_scan_publisher_        = nh.advertise<sensor_msgs::PointCloud2>("/velodyne_cloud_2", 100);
-  cloud_corner_publisher_      = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 100);
-  cloud_corner_less_publisher_ = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 100);
-  cloud_surf_publisher_        = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_flat", 100);
-  cloud_surf_less_publisher_   = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 100);
+  cloud_scan_origin_publisher_ = nh.advertise<sensor_msgs::PointCloud2>("/loam/origin/velodyne_cloud", 100);
 
-  cloud_surround_publisher_ = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 100);
+  cloud_scan_publisher_        = nh.advertise<sensor_msgs::PointCloud2>("/loam/deskew/velodyne_cloud", 100);
+  cloud_corner_publisher_      = nh.advertise<sensor_msgs::PointCloud2>("/loam/deskew/laser_cloud_sharp", 100);
+  cloud_corner_less_publisher_ = nh.advertise<sensor_msgs::PointCloud2>("/loam/deskew/laser_cloud_less_sharp", 100);
+  cloud_surf_publisher_        = nh.advertise<sensor_msgs::PointCloud2>("/loam/deskew/laser_cloud_flat", 100);
+  cloud_surf_less_publisher_   = nh.advertise<sensor_msgs::PointCloud2>("/loam/deskew/laser_cloud_less_flat", 100);
+
+  cloud_surround_publisher_ = nh.advertise<sensor_msgs::PointCloud2>("/loam/laser_cloud_surround", 100);
 
   aftmapped_odom_publisher_          = nh.advertise<nav_msgs::Odometry>("/aft_mapped_to_init", 100);
   aftmapped_odom_highfrec_publisher_ = nh.advertise<nav_msgs::Odometry>("/aft_mapped_to_init_high_frec", 100);
@@ -86,6 +92,10 @@ LaserMapping::~LaserMapping() {
   }
   thread_.join();
   gps_fusion_handler_->Optimize();
+
+  if (kEnableMapSave) {
+    pcl::io::savePLYFileBinary("msf_loam_cloud.ply", *g_cloud_all);
+  }
   LOG(INFO) << "LaserMapping finished.";
 }
 
@@ -131,6 +141,13 @@ void LaserMapping::Run() {
     }
 
     LaserOdometryResultType odom_result_deskewed;
+
+    sensor_msgs::PointCloud2 laser_cloud_out_msg;
+    pcl::toROSMsg(*odom_result.cloud_full_res, laser_cloud_out_msg);
+    laser_cloud_out_msg.header.stamp    = ToRos(odom_result.time);
+    laser_cloud_out_msg.header.frame_id = "aft_mapped";
+    cloud_scan_origin_publisher_.publish(laser_cloud_out_msg);
+
     UndistortScan(odom_result, imu_buf_, odom_result_deskewed);
     // todo add doc
     std::swap(odom_result, odom_result_deskewed);
@@ -156,11 +173,11 @@ void LaserMapping::Run() {
       TicToc t_add;
 
       hybrid_grid_map_corner_.InsertScan(
-          TransformPointCloud(laserCloudCornerLastStack, pose_map_scan2world_),
+          TransformPointCloud<PointType>(laserCloudCornerLastStack, pose_map_scan2world_),
           downsize_filter_corner_);
 
       hybrid_grid_map_surf_.InsertScan(
-          TransformPointCloud(laserCloudSurfLastStack, pose_map_scan2world_),
+          TransformPointCloud<PointType>(laserCloudSurfLastStack, pose_map_scan2world_),
           downsize_filter_surf_);
 
       LOG_STEP_TIME("MAP", "add points", t_add.toc());
@@ -172,6 +189,11 @@ void LaserMapping::Run() {
     TicToc t_whole;
 
     transformAssociateToMap();
+
+    if (kEnableMapSave) {
+      auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
+      *g_cloud_all += *cloud;
+    }
 
     TicToc t_shift;
     PointCloudPtr laserCloudCornerFromMap =
@@ -209,11 +231,11 @@ void LaserMapping::Run() {
     TicToc t_add;
 
     hybrid_grid_map_corner_.InsertScan(
-        TransformPointCloud(laserCloudCornerLastStack, pose_map_scan2world_),
+        TransformPointCloud<PointType>(laserCloudCornerLastStack, pose_map_scan2world_),
         downsize_filter_corner_);
 
     hybrid_grid_map_surf_.InsertScan(
-        TransformPointCloud(laserCloudSurfLastStack, pose_map_scan2world_),
+        TransformPointCloud<PointType>(laserCloudSurfLastStack, pose_map_scan2world_),
         downsize_filter_surf_);
 
     LOG_STEP_TIME("MAP", "add points", t_add.toc());
@@ -284,7 +306,8 @@ void LaserMapping::UndistortScan(
     const LaserOdometryResultType &laser_odometry_result,
     const std::vector<ImuData> &imu_buf,
     LaserOdometryResultType &laser_odometry_result_deskewed) {
-  auto it  = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
+  auto it = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
+  LOG_IF(ERROR, ToSeconds(it->time - laser_odometry_result.time) >= 0.01) << "imu preintegration failed.";
   auto idx = std::distance(imu_buf.begin(), it);
   // todo add doc
   auto imu_preintegration = std::make_unique<IntegrationBase>(imu_buf[idx].linear_acceleration, imu_buf[idx].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
@@ -294,9 +317,6 @@ void LaserMapping::UndistortScan(
     imu_preintegration->push_back(ToSeconds(imu_buf[idx + 1].time - imu_buf[idx].time), imu_buf[idx + 1].linear_acceleration, imu_buf[idx + 1].angular_velocity);
   }
   ScanUndistortionUtils::DoUndistort(laser_odometry_result, *imu_preintegration, laser_odometry_result_deskewed);
-  laser_odometry_result_deskewed.time      = laser_odometry_result.time;
-  laser_odometry_result_deskewed.odom_pose = laser_odometry_result.odom_pose;
-  laser_odometry_result_deskewed.map_pose  = laser_odometry_result.map_pose;
 }
 
 void LaserMapping::AddImu(const ImuData &imu_data) {
