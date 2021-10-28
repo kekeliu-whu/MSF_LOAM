@@ -1,11 +1,11 @@
 #include <common/tic_toc.h>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
 #include <pcl/io/ply_io.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <ros/init.h>
 #include <tf/transform_broadcaster.h>
-#include <iterator>
 
 #include "common/common.h"
 #include "common/time.h"
@@ -148,7 +148,10 @@ void LaserMapping::Run() {
     laser_cloud_out_msg.header.frame_id = "aft_mapped";
     cloud_scan_origin_publisher_.publish(laser_cloud_out_msg);
 
-    UndistortScan(odom_result, imu_buf_, odom_result_deskewed);
+    {
+      absl::MutexLock lg(&mtx_imu_buf_);
+      UndistortScan(odom_result, imu_buf_, odom_result_deskewed);
+    }
     // todo add doc
     std::swap(odom_result, odom_result_deskewed);
 
@@ -306,9 +309,16 @@ void LaserMapping::UndistortScan(
     const LaserOdometryResultType &laser_odometry_result,
     const std::vector<ImuData> &imu_buf,
     LaserOdometryResultType &laser_odometry_result_deskewed) {
-  auto it = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
-  LOG_IF(ERROR, ToSeconds(it->time - laser_odometry_result.time) >= 0.01) << "imu preintegration failed.";
-  auto idx = std::distance(imu_buf.begin(), it);
+  auto it                      = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
+  double lidar_imu_time_offset = ToSeconds(it->time - laser_odometry_result.time);
+  auto idx                     = std::distance(imu_buf.begin(), it);
+  LOG_IF(ERROR, lidar_imu_time_offset >= 0.01)
+      << fmt::format(
+             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={} prev_imu={}",
+             lidar_imu_time_offset,
+             imu_buf[idx].time,
+             imu_buf[idx - 1].time,
+             laser_odometry_result.time);
   // todo add doc
   auto imu_preintegration = std::make_unique<IntegrationBase>(imu_buf[idx].linear_acceleration, imu_buf[idx].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
   imu_preintegration->push_back(ToSeconds(imu_buf[idx].time - laser_odometry_result.time), imu_buf[idx].linear_acceleration, it->angular_velocity);
@@ -320,7 +330,10 @@ void LaserMapping::UndistortScan(
 }
 
 void LaserMapping::AddImu(const ImuData &imu_data) {
-  imu_buf_.push_back(imu_data);
+  {
+    absl::MutexLock lg(&mtx_imu_buf_);
+    imu_buf_.push_back(imu_data);
+  }
 
   auto imu_msg = pb_data_.add_imu_datas();
   imu_msg->set_timestamp(ToUniversal(imu_data.time));

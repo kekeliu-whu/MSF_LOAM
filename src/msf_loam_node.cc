@@ -441,14 +441,14 @@ int main(int argc, char **argv) {
     LOG_IF(WARNING, !FLAGS_bag_filename.empty())
         << "Online mode is enabled, so the parameter 'bag_filename' will be ignored.";
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
-        "/velodyne_points", 10,
+        "/velodyne_points", 100,
         boost::bind(TryHandleLaserCloudMessageWithImuIntegrated, _1,
                     boost::ref(laser_odometry_handler)));
     ros::Subscriber subImu = nh.subscribe<sensor_msgs::Imu>(
-        "/imu", 10,
+        "/imu", 1000,
         boost::bind(HandleImuMessage, _1, boost::ref(laser_odometry_handler)));
     ros::Subscriber subOdom = nh.subscribe<nav_msgs::Odometry>(
-        "/odometry_gt", 10,
+        "/odometry_gt", 100,
         boost::bind(HandleOdomMessage, _1, boost::ref(laser_odometry_handler)));
     ros::spin();
   }

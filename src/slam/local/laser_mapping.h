@@ -1,6 +1,7 @@
 #ifndef MSF_LOAM_VELODYNE_LASER_MAPPING_H
 #define MSF_LOAM_VELODYNE_LASER_MAPPING_H
 
+#include <absl/synchronization/mutex.h>
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
 #include <tf/transform_broadcaster.h>
@@ -101,7 +102,8 @@ class LaserMapping {
   /**
    * IMU
    */
-  std::vector<ImuData> imu_buf_;
+  absl::Mutex mtx_imu_buf_;
+  std::vector<ImuData> imu_buf_ GUARDED_BY(mtx_imu_buf_);
 
   bool is_offline_mode_;
   bool is_firstframe_;
