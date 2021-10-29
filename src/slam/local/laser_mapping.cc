@@ -162,15 +162,14 @@ void LaserMapping::Run() {
     // 2. match scan with surrounded map
     //
     TransformAssociateToMap();
+    FilterScanFeature(odom_result, odom_result);
+    MatchScan2Map(odom_result);
+    TransformUpdate();
 
     if (kEnableMapSave) {
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
     }
-
-    FilterScanFeature(odom_result, odom_result);
-    MatchScan2Map(odom_result);
-    TransformUpdate();
 
     TicToc t_add;
 
