@@ -86,10 +86,7 @@ LaserMapping::LaserMapping(bool is_offline_mode)
 }
 
 LaserMapping::~LaserMapping() {
-  {
-    std::unique_lock<std::mutex> ul(mutex_);
-    should_exit_ = true;
-  }
+  should_exit_ = true;
   thread_.join();
   gps_fusion_handler_->Optimize();
 
@@ -101,9 +98,10 @@ LaserMapping::~LaserMapping() {
 
 void LaserMapping::AddLaserOdometryResult(
     const LaserOdometryResultType &laser_odometry_result) {
-  std::unique_lock<std::mutex> ul(mutex_);
-  odometry_result_queue_.push(laser_odometry_result);
-  cv_.notify_one();
+  {
+    absl::MutexLock lg(&mtx_odometry_result_queue_);
+    odometry_result_queue_.push(laser_odometry_result);
+  }
   // publish odom tf
   // high frequency publish
   nav_msgs::Odometry aftmapped_odom;
@@ -118,17 +116,21 @@ void LaserMapping::Run() {
   while (ros::ok()) {
     LaserOdometryResultType odom_result;
     {
-      std::unique_lock<std::mutex> ul(mutex_);
-      // Try to get new messages in 50 ms, return false if failed
-      bool has_new_msg = cv_.wait_for(
-          ul, std::chrono::milliseconds(50),
-          [this] { return !this->odometry_result_queue_.empty(); });
+      absl::MutexLock lg(&mtx_odometry_result_queue_);
+      // Try to get new messages in 100us, return false if no messages found or timeout,
+      // Tips:
+      // 1. Spurious awakening has been handled in AwaitWithTimeout
+      // 2. Here we use Lock+AwaitWithTimeout instead of LockWhenWithTimeout
+      auto f           = [this]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mtx_odometry_result_queue_) { return !this->odometry_result_queue_.empty(); };
+      bool has_new_msg = mtx_odometry_result_queue_.AwaitWithTimeout(absl::Condition{&f}, absl::Microseconds(100));
       if (!has_new_msg) {
-        if (should_exit_)
+        if (should_exit_) {
           break;
-        else
+        } else {
           continue;
+        }
       }
+
       odom_result = odometry_result_queue_.front();
       odometry_result_queue_.pop();
       if (!is_offline_mode_) {
