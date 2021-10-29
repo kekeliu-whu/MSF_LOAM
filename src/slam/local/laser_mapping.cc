@@ -17,7 +17,7 @@
 
 namespace {
 
-const bool kEnableMapSave = false;
+const bool kEnableMapSave = true;
 PointCloudOriginalPtr g_cloud_all(new PointCloudOriginal);
 
 template <typename T>
@@ -88,9 +88,15 @@ LaserMapping::~LaserMapping() {
   thread_.join();
   gps_fusion_handler_->Optimize();
 
+  // save point cloud map
   if (kEnableMapSave) {
     pcl::io::savePLYFileBinary("msf_loam_cloud.ply", *g_cloud_all);
   }
+
+  // save imu/odom data to proto file
+  std::ofstream ofs(kTrajectoryPbPath, std::ios_base::out | std::ios_base::binary);
+  pb_data_.SerializeToOstream(&ofs);
+
   LOG(INFO) << "LaserMapping finished.";
 }
 
@@ -140,122 +146,41 @@ void LaserMapping::Run() {
       }
     }
 
-    LaserOdometryResultType odom_result_deskewed;
-
-    sensor_msgs::PointCloud2 laser_cloud_out_msg;
-    pcl::toROSMsg(*odom_result.cloud_full_res, laser_cloud_out_msg);
-    laser_cloud_out_msg.header.stamp    = ToRos(odom_result.time);
-    laser_cloud_out_msg.header.frame_id = "aft_mapped";
-    cloud_scan_origin_publisher_.publish(laser_cloud_out_msg);
-
+    //
+    // 1. deskew scan
+    //
     {
       absl::MutexLock lg(&mtx_imu_buf_);
-      UndistortScan(odom_result, imu_buf_, odom_result_deskewed);
-    }
-    // todo add doc
-    std::swap(odom_result, odom_result_deskewed);
-
-    // scan match
-    // input: from odom
-    PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
-    PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
-    PointCloudConstPtr laserCloudFullRes    = ToPointType(odom_result.cloud_full_res);
-
-    if (is_firstframe_) {
-      // todo merge first frame process code
-      is_firstframe_ = false;
-      LOG(INFO) << "[MAP] Initializing ...";
-      PointCloudPtr laserCloudCornerLastStack(new PointCloud);
-      downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
-      downsize_filter_corner_.filter(*laserCloudCornerLastStack);
-
-      PointCloudPtr laserCloudSurfLastStack(new PointCloud);
-      downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
-      downsize_filter_surf_.filter(*laserCloudSurfLastStack);
-
-      TicToc t_add;
-
-      hybrid_grid_map_corner_.InsertScan(
-          TransformPointCloud<PointType>(laserCloudCornerLastStack, pose_map_scan2world_),
-          downsize_filter_corner_);
-
-      hybrid_grid_map_surf_.InsertScan(
-          TransformPointCloud<PointType>(laserCloudSurfLastStack, pose_map_scan2world_),
-          downsize_filter_surf_);
-
-      LOG_STEP_TIME("MAP", "add points", t_add.toc());
-      continue;
+      UndistortScan(odom_result, imu_buf_, odom_result);
     }
 
     pose_odom_scan2world_ = odom_result.odom_pose;
 
     TicToc t_whole;
 
-    transformAssociateToMap();
+    //
+    // 2. match scan with surrounded map
+    //
+    TransformAssociateToMap();
 
     if (kEnableMapSave) {
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
     }
 
-    TicToc t_shift;
-    PointCloudPtr laserCloudCornerFromMap =
-        hybrid_grid_map_corner_.GetSurroundedCloud(laserCloudCornerLast,
-                                                   pose_map_scan2world_);
-    PointCloudPtr laserCloudSurfFromMap =
-        hybrid_grid_map_surf_.GetSurroundedCloud(laserCloudSurfLast,
-                                                 pose_map_scan2world_);
-    LOG_STEP_TIME("MAP", "Collect surround cloud", t_shift.toc());
-
-    PointCloudPtr laserCloudCornerLastStack(new PointCloud);
-    downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
-    downsize_filter_corner_.filter(*laserCloudCornerLastStack);
-
-    PointCloudPtr laserCloudSurfLastStack(new PointCloud);
-    downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
-    downsize_filter_surf_.filter(*laserCloudSurfLastStack);
-
-    LOG(INFO) << "[MAP]"
-              << " corner=" << laserCloudCornerFromMap->size()
-              << ", surf=" << laserCloudSurfFromMap->size();
-    if (laserCloudCornerFromMap->size() > 10 &&
-        laserCloudSurfFromMap->size() > 50) {
-      TimestampedPointCloud<PointType> cloud_map, scan_curr;
-      cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
-      cloud_map.cloud_surf_less_flat    = laserCloudSurfFromMap;
-      scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
-      scan_curr.cloud_surf_less_flat    = laserCloudSurfLastStack;
-      scan_matcher_->MatchScan2Map(cloud_map, scan_curr, &pose_map_scan2world_);
-    } else {
-      LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
-    }
-    transformUpdate();
+    FilterScanFeature(odom_result, odom_result);
+    MatchScan2Map(odom_result);
+    TransformUpdate();
 
     TicToc t_add;
 
-    hybrid_grid_map_corner_.InsertScan(
-        TransformPointCloud<PointType>(laserCloudCornerLastStack, pose_map_scan2world_),
-        downsize_filter_corner_);
-
-    hybrid_grid_map_surf_.InsertScan(
-        TransformPointCloud<PointType>(laserCloudSurfLastStack, pose_map_scan2world_),
-        downsize_filter_surf_);
+    //
+    // 3. insert scan into map
+    //
+    InsertScan2Map(odom_result);
 
     LOG_STEP_TIME("MAP", "add points", t_add.toc());
     LOG_STEP_TIME("MAP", "whole mapping", t_whole.toc());
-
-    // publish surround map for every 5 frame
-    if (frame_idx_cur_ % 5 == 0) {
-      PointCloudPtr laserCloudSurround(new PointCloud);
-      *laserCloudSurround += *laserCloudCornerFromMap;
-      *laserCloudSurround += *laserCloudSurfFromMap;
-
-      sensor_msgs::PointCloud2 laserCloudSurround3;
-      pcl::toROSMsg(*laserCloudSurround, laserCloudSurround3);
-      laserCloudSurround3.header.stamp    = ToRos(odom_result.time);
-      laserCloudSurround3.header.frame_id = "camera_init";
-      cloud_surround_publisher_.publish(laserCloudSurround3);
-    }
 
     gps_fusion_handler_->AddLocalPose(odom_result.time,
                                       pose_map_scan2world_);
@@ -271,9 +196,89 @@ void LaserMapping::Run() {
 
     frame_idx_cur_++;
   }
+}
 
-  std::ofstream ofs(kTrajectoryPbPath, std::ios_base::out | std::ios_base::binary);
-  pb_data_.SerializeToOstream(&ofs);
+void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
+  PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
+  PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
+
+  PointCloudPtr laserCloudCornerLastStack(new PointCloud);
+  downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
+  downsize_filter_corner_.filter(*laserCloudCornerLastStack);
+
+  PointCloudPtr laserCloudSurfLastStack(new PointCloud);
+  downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
+  downsize_filter_surf_.filter(*laserCloudSurfLastStack);
+
+  TicToc t_shift;
+  PointCloudPtr laserCloudCornerFromMap =
+      hybrid_grid_map_corner_.GetSurroundedCloud(laserCloudCornerLast,
+                                                 pose_map_scan2world_);
+  PointCloudPtr laserCloudSurfFromMap =
+      hybrid_grid_map_surf_.GetSurroundedCloud(laserCloudSurfLast,
+                                               pose_map_scan2world_);
+  LOG_STEP_TIME("MAP", "Collect surround cloud", t_shift.toc());
+
+  LOG(INFO) << "[MAP]"
+            << " corner=" << laserCloudCornerFromMap->size()
+            << ", surf=" << laserCloudSurfFromMap->size();
+  if (laserCloudCornerFromMap->size() > 10 &&
+      laserCloudSurfFromMap->size() > 50) {
+    TimestampedPointCloud<PointType> cloud_map, scan_curr;
+    cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
+    cloud_map.cloud_surf_less_flat    = laserCloudSurfFromMap;
+    scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
+    scan_curr.cloud_surf_less_flat    = laserCloudSurfLastStack;
+    scan_matcher_->MatchScan2Map(cloud_map, scan_curr, &pose_map_scan2world_);
+  } else {
+    LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
+  }
+
+  // publish surround map for every 5 frame
+  if (frame_idx_cur_ % 5 == 0) {
+    PointCloudPtr laserCloudSurround(new PointCloud);
+    *laserCloudSurround += *laserCloudCornerFromMap;
+    *laserCloudSurround += *laserCloudSurfFromMap;
+
+    sensor_msgs::PointCloud2 laserCloudSurround3;
+    pcl::toROSMsg(*laserCloudSurround, laserCloudSurround3);
+    laserCloudSurround3.header.stamp    = ToRos(odom_result.time);
+    laserCloudSurround3.header.frame_id = "camera_init";
+    cloud_surround_publisher_.publish(laserCloudSurround3);
+  }
+}
+
+void LaserMapping::InsertScan2Map(const LaserOdometryResultType &odom_result) {
+  hybrid_grid_map_corner_.InsertScan(
+      TransformPointCloud<PointType>(ToPointType(odom_result.cloud_corner_less_sharp), pose_map_scan2world_),
+      downsize_filter_corner_);
+
+  hybrid_grid_map_surf_.InsertScan(
+      TransformPointCloud<PointType>(ToPointType(odom_result.cloud_surf_less_flat), pose_map_scan2world_),
+      downsize_filter_surf_);
+}
+
+void LaserMapping::FilterScanFeature(
+    const LaserOdometryResultType &odom_result,
+    LaserOdometryResultType &odom_result_filtered) {
+  // todo filter feature point
+  // PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
+  // PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
+
+  // PointCloudPtr laserCloudCornerLastStack(new PointCloud);
+  // downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
+  // downsize_filter_corner_.filter(*laserCloudCornerLastStack);
+
+  // PointCloudPtr laserCloudSurfLastStack(new PointCloud);
+  // downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
+  // downsize_filter_surf_.filter(*laserCloudSurfLastStack);
+
+  // // copy all fields
+  // auto odom_result_filtered_out                    = odom_result.CopyAllFieldsWithoudCloud();
+  // odom_result_filtered_out.cloud_corner_less_sharp = laserCloudCornerLastStack;
+  // odom_result_filtered_out.cloud_surf_less_flat    = laserCloudSurfLastStack;
+
+  // odom_result_filtered = odom_result_filtered_out;
 }
 
 void LaserMapping::PublishTrajectory(const LaserOdometryResultType &scan) {
@@ -341,7 +346,7 @@ void LaserMapping::AddImu(const ImuData &imu_data) {
   *imu_msg->mutable_linear_acceleration() = ToProto(imu_data.linear_acceleration);
 }
 
-void LaserMapping::PublishScan(const TimestampedPointCloud<PointTypeOriginal> &scan) {
+void LaserMapping::PublishScan(const LaserOdometryResultType &scan) {
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*scan.cloud_full_res, laser_cloud_out_msg);
   laser_cloud_out_msg.header.stamp    = ToRos(scan.time);
