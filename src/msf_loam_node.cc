@@ -78,10 +78,9 @@ enum class PointLabel {
   P_FLAT,
 };
 
-const int kDefaultScanNum = 16;
-const double kScanPeriod  = 0.1;  // 扫描周期
-double g_min_range;               // 最小扫描距离
-int g_scan_num;                   // 扫描线数
+const int kMaxScanNum    = 128;
+const double kScanPeriod = 0.1;  // 扫描周期
+double g_min_range;              // 最小扫描距离
 std::uint64_t g_imu_msgs_num = 0;
 sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
 
@@ -164,8 +163,6 @@ void RealHandleLaserCloudMessage(
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   TicToc t_whole;
   TicToc t_prepare;
-  std::vector<int> scan_start_indices(g_scan_num, 0);
-  std::vector<int> scan_end_indices(g_scan_num, 0);
 
   pcl::PointCloud<PointTypeOriginal> laser_cloud_in;
   pcl::fromROSMsg(*laser_cloud_msg, laser_cloud_in);
@@ -177,11 +174,22 @@ void RealHandleLaserCloudMessage(
   int cloudSize = laser_cloud_in.size();
   LOG(INFO) << "[REG] Valid Cloud size: " << cloudSize;
 
-  std::vector<PointCloudOriginal> laserCloudScans(g_scan_num);
+  std::vector<PointCloudOriginal> laserCloudScans(kMaxScanNum);
   ComputeRelaTimeForEachPoint(laser_cloud_in, laserCloudScans);
+  int valid_scan_num = 0;
+  for (int i = kMaxScanNum; i > 0; --i) {
+    if (!laserCloudScans[i - 1].empty()) {
+      valid_scan_num = i;
+      break;
+    }
+  }
+  // todo check
+  CHECK_GT(valid_scan_num, 0);
 
+  std::vector<int> scan_start_indices(valid_scan_num, 0);
+  std::vector<int> scan_end_indices(valid_scan_num, 0);
   PointCloudOriginalPtr laser_cloud(new PointCloudOriginal);
-  for (int i = 0; i < g_scan_num; i++) {
+  for (int i = 0; i < valid_scan_num; i++) {
     scan_start_indices[i] = laser_cloud->size() + 5;
     *laser_cloud += laserCloudScans[i];
     scan_end_indices[i] = static_cast<int>(laser_cloud->size()) - 6;
@@ -241,7 +249,7 @@ void RealHandleLaserCloudMessage(
 
   double t_q_sort = 0;
   // 提取每帧扫描线中的特征点
-  for (int i = 0; i < g_scan_num; i++) {
+  for (int i = 0; i < valid_scan_num; i++) {
     if (scan_end_indices[i] - scan_start_indices[i] < 6) continue;
     PointCloudOriginalPtr surfPointsLessFlatScan(new PointCloudOriginal);
     // 将每条扫描线分成6片，对每片提取特征点
@@ -408,12 +416,8 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
 
-  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, kDefaultScanNum))
-      << "Use default scan_line: " << kDefaultScanNum;
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
       << "Use default minimum_range: 0.3";
-  CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
-      << "only support velodyne with 16, 32 or 64 scan line!";
 
   auto laser_odometry_handler =
       std::make_shared<LaserOdometry>(FLAGS_is_offline_mode);
