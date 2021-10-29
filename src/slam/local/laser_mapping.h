@@ -38,18 +38,24 @@ class LaserMapping {
       const std::vector<ImuData> &queue,
       LaserOdometryResultType &laser_odometry_result_deskewed);
 
+  void FilterScanFeature(const LaserOdometryResultType &odom_result, LaserOdometryResultType &odom_result_filtered);
+
+  void MatchScan2Map(const LaserOdometryResultType &odom_result);
+
+  void InsertScan2Map(const LaserOdometryResultType &odom_result);
+
   void Run();
 
   void PublishTrajectory(const LaserOdometryResultType &scan);
 
-  void PublishScan(const TimestampedPointCloud<PointTypeOriginal> &scan);
+  void PublishScan(const LaserOdometryResultType &scan);
 
   // set initial guess for pose
-  void transformAssociateToMap() {
+  void TransformAssociateToMap() {
     pose_map_scan2world_ = pose_odom2map_ * pose_odom_scan2world_;
   }
 
-  void transformUpdate() {
+  void TransformUpdate() {
     pose_odom2map_ = pose_map_scan2world_ * pose_odom_scan2world_.inverse();
   }
 
@@ -106,7 +112,7 @@ class LaserMapping {
 
   bool is_offline_mode_;
   bool is_firstframe_;
-  bool should_exit_;
+  volatile bool should_exit_;
 
   proto::PbData pb_data_;
 };

@@ -29,12 +29,12 @@ void ScanUndistortionUtils::DoUndistort(
     const TimestampedPointCloud<PointTypeOriginal> &scan_in,
     const IntegrationBase &imu_integration,
     TimestampedPointCloud<PointTypeOriginal> &scan_out) {
-  scan_out.time      = scan_in.time;
-  scan_out.odom_pose = scan_in.odom_pose;
-  scan_out.map_pose  = scan_in.map_pose;
-  UndistortScanInternal(scan_in.cloud_full_res, imu_integration, scan_out.cloud_full_res);
-  UndistortScanInternal(scan_in.cloud_corner_sharp, imu_integration, scan_out.cloud_corner_sharp);
-  UndistortScanInternal(scan_in.cloud_corner_less_sharp, imu_integration, scan_out.cloud_corner_less_sharp);
-  UndistortScanInternal(scan_in.cloud_surf_flat, imu_integration, scan_out.cloud_surf_flat);
-  UndistortScanInternal(scan_in.cloud_surf_less_flat, imu_integration, scan_out.cloud_surf_less_flat);
+  auto scan_out_filtered = scan_in.CopyAllFieldsWithoudCloud();
+  UndistortScanInternal(scan_in.cloud_full_res, imu_integration, scan_out_filtered.cloud_full_res);
+  UndistortScanInternal(scan_in.cloud_corner_sharp, imu_integration, scan_out_filtered.cloud_corner_sharp);
+  UndistortScanInternal(scan_in.cloud_corner_less_sharp, imu_integration, scan_out_filtered.cloud_corner_less_sharp);
+  UndistortScanInternal(scan_in.cloud_surf_flat, imu_integration, scan_out_filtered.cloud_surf_flat);
+  UndistortScanInternal(scan_in.cloud_surf_less_flat, imu_integration, scan_out_filtered.cloud_surf_less_flat);
+
+  scan_out = scan_out_filtered;
 }
