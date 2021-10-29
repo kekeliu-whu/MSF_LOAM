@@ -60,10 +60,9 @@ class LaserMapping {
   int frame_idx_cur_;
 
   std::thread thread_;
-  std::mutex mutex_;
-  std::condition_variable cv_;
 
-  std::queue<LaserOdometryResultType> odometry_result_queue_;
+  absl::Mutex mtx_odometry_result_queue_;
+  std::queue<LaserOdometryResultType> odometry_result_queue_ ABSL_GUARDED_BY(mtx_odometry_result_queue_);
 
   HybridGrid hybrid_grid_map_corner_;
   HybridGrid hybrid_grid_map_surf_;
@@ -103,7 +102,7 @@ class LaserMapping {
    * IMU
    */
   absl::Mutex mtx_imu_buf_;
-  std::vector<ImuData> imu_buf_ GUARDED_BY(mtx_imu_buf_);
+  std::vector<ImuData> imu_buf_ ABSL_GUARDED_BY(mtx_imu_buf_);
 
   bool is_offline_mode_;
   bool is_firstframe_;
