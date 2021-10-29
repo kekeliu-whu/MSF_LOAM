@@ -1,6 +1,7 @@
 #ifndef MSF_LOAM_VELODYNE_LASER_MAPPING_H
 #define MSF_LOAM_VELODYNE_LASER_MAPPING_H
 
+#include <absl/synchronization/mutex.h>
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
 #include <tf/transform_broadcaster.h>
@@ -8,13 +9,15 @@
 #include <queue>
 #include <thread>
 
+#include "common/common.h"
 #include "common/timestamped_pointcloud.h"
+#include "msg.pb.h"
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/hybrid_grid.h"
-#include "slam/imu_fusion/imu_tracker.h"
+#include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/scan_matcher.h"
 
-using LaserOdometryResultType = TimestampedPointCloud<PointType>;
+using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
 
 class LaserMapping {
  public:
@@ -30,16 +33,29 @@ class LaserMapping {
   void AddOdom(const OdometryData &odom_data);
 
  private:
+  static void UndistortScan(
+      const LaserOdometryResultType &laser_odometry_result,
+      const std::vector<ImuData> &queue,
+      LaserOdometryResultType &laser_odometry_result_deskewed);
+
+  void FilterScanFeature(const LaserOdometryResultType &odom_result, LaserOdometryResultType &odom_result_filtered);
+
+  void MatchScan2Map(const LaserOdometryResultType &odom_result);
+
+  void InsertScan2Map(const LaserOdometryResultType &odom_result);
+
   void Run();
 
-  void PublishScan(const TimestampedPointCloud<PointType> &scan);
+  void PublishTrajectory(const LaserOdometryResultType &scan);
+
+  void PublishScan(const LaserOdometryResultType &scan);
 
   // set initial guess for pose
-  void transformAssociateToMap() {
+  void TransformAssociateToMap() {
     pose_map_scan2world_ = pose_odom2map_ * pose_odom_scan2world_;
   }
 
-  void transformUpdate() {
+  void TransformUpdate() {
     pose_odom2map_ = pose_map_scan2world_ * pose_odom_scan2world_.inverse();
   }
 
@@ -50,10 +66,9 @@ class LaserMapping {
   int frame_idx_cur_;
 
   std::thread thread_;
-  std::mutex mutex_;
-  std::condition_variable cv_;
 
-  std::queue<LaserOdometryResultType> odometry_result_queue_;
+  absl::Mutex mtx_odometry_result_queue_;
+  std::queue<LaserOdometryResultType> odometry_result_queue_ ABSL_GUARDED_BY(mtx_odometry_result_queue_);
 
   HybridGrid hybrid_grid_map_corner_;
   HybridGrid hybrid_grid_map_surf_;
@@ -74,6 +89,7 @@ class LaserMapping {
    */
 
   ros::Publisher cloud_scan_publisher_;
+  ros::Publisher cloud_scan_origin_publisher_;
   ros::Publisher cloud_corner_publisher_;
   ros::Publisher cloud_corner_less_publisher_;
   ros::Publisher cloud_surf_publisher_;
@@ -87,6 +103,18 @@ class LaserMapping {
   nav_msgs::Path aftmapped_path_;
 
   tf::TransformBroadcaster transform_broadcaster_;
+
+  /**
+   * IMU
+   */
+  absl::Mutex mtx_imu_buf_;
+  std::vector<ImuData> imu_buf_ ABSL_GUARDED_BY(mtx_imu_buf_);
+
+  bool is_offline_mode_;
+  bool is_firstframe_;
+  volatile bool should_exit_;
+
+  proto::PbData pb_data_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H

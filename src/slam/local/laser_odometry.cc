@@ -65,44 +65,26 @@ LaserOdometry::LaserOdometry(bool is_offline_mode)
 
 LaserOdometry::~LaserOdometry() { LOG(INFO) << "LaserOdometry finished."; }
 
-void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_curr) {
-  auto rotation = AdvanceImuTracker(scan_curr.timestamp);
-  if (rotation) {
-    scan_curr.imu_rotation = *rotation;
-  }
-
+void LaserOdometry::AddLaserScan(const TimestampedPointCloud<PointTypeOriginal> &scan_curr) {
   TicToc t_whole;
   // initializing
   if (scan_last_.cloud_full_res->empty()) {
     LOG(INFO) << "[ODO] Initializing ...";
   } else {
-    // pose_curr2last_.rotation() =
-    // scan_last_.imu_rotation * scan_curr.imu_rotation.inverse();
     scan_matcher_->MatchScan2Scan(scan_last_, scan_curr, &pose_curr2last_);
 
-    LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
-    LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
+    // LOG(INFO) << "[ODO] odometry_delta: " << pose_curr2last_;
+    // LOG(INFO) << "[ODO] odometry_curr: " << pose_scan2world_;
     pose_scan2world_ = pose_scan2world_ * pose_curr2last_;
   }
 
-  // publish odometry
-  nav_msgs::Odometry laserOdometry;
-  laserOdometry.header.frame_id = "camera_init";
-  laserOdometry.child_frame_id  = "laser_odom";
-  laserOdometry.header.stamp    = ToRos(scan_curr.timestamp);
-  laserOdometry.pose            = ToRos(pose_scan2world_);
-  laser_odom_publisher_.publish(laserOdometry);
+  // publish odometry trajectory
+  auto scan_curr_with_odom_pose      = scan_curr;
+  scan_curr_with_odom_pose.odom_pose = pose_scan2world_;
 
-  geometry_msgs::PoseStamped laserPose;
-  laserPose.header         = laserOdometry.header;
-  laserPose.pose           = laserOdometry.pose.pose;
-  laser_path_.header.stamp = laserOdometry.header.stamp;
-  laser_path_.poses.push_back(laserPose);
-  laser_path_.header.frame_id = "camera_init";
-  laser_path_publisher_.publish(laser_path_);
+  PublishTrajectory(scan_curr_with_odom_pose);
 
-  scan_curr.odom_pose = pose_scan2world_;
-  laser_mapper_handler_->AddLaserOdometryResult(ToTypePointXYZI(scan_curr));
+  laser_mapper_handler_->AddLaserOdometryResult(scan_curr_with_odom_pose);
 
   scan_last_ = scan_curr;
 
@@ -112,32 +94,26 @@ void LaserOdometry::AddLaserScan(TimestampedPointCloud<PointTypeOriginal> scan_c
 }
 
 void LaserOdometry::AddImu(const ImuData &imu_data) {
-  // estimate rotation_delta
-  if (!imu_tracker_) {
-    LOG(INFO) << "Initializing imu tracker ...";
-    imu_tracker_.reset(new ImuTracker(10, imu_data.time));
-    imu_tracker_->AddImuObservation(imu_data);
-    imu_tracker_->Advance(imu_data.time);
-  }
-  CHECK(imu_queue_.empty() || imu_data.time > imu_queue_.back().time);
-  imu_queue_.push(imu_data);
   laser_mapper_handler_->AddImu(imu_data);
-}
-
-std::unique_ptr<Quaternion<double>> LaserOdometry::AdvanceImuTracker(
-    const Time &time) {
-  if (!imu_tracker_ || time < imu_tracker_->time()) return nullptr;
-  while (!imu_queue_.empty() && imu_queue_.front().time <= time) {
-    imu_tracker_->AddImuObservation(imu_queue_.front());
-    imu_tracker_->Advance(imu_queue_.front().time);
-    imu_queue_.pop();
-  }
-  imu_tracker_->Advance(time);
-  std::unique_ptr<Quaternion<double>> r(new Quaternion<double>);
-  *r = imu_tracker_->orientation();
-  return r;
 }
 
 void LaserOdometry::AddOdom(const OdometryData &odom_data) {
   laser_mapper_handler_->AddOdom(odom_data);
+}
+
+void LaserOdometry::PublishTrajectory(const TimestampedPointCloud<PointTypeOriginal> &scan_curr) {
+  nav_msgs::Odometry laserOdometry;
+  laserOdometry.header.frame_id = "camera_init";
+  laserOdometry.child_frame_id  = "laser_odom";
+  laserOdometry.header.stamp    = ToRos(scan_curr.time);
+  laserOdometry.pose            = ToRos(scan_curr.odom_pose);
+  laser_odom_publisher_.publish(laserOdometry);
+
+  geometry_msgs::PoseStamped laserPose;
+  laserPose.header            = laserOdometry.header;
+  laserPose.pose              = laserOdometry.pose.pose;
+  laser_path_.header.stamp    = laserOdometry.header.stamp;
+  laser_path_.header.frame_id = "camera_init";
+  laser_path_.poses.push_back(laserPose);
+  laser_path_publisher_.publish(laser_path_);
 }

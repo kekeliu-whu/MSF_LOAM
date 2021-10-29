@@ -6,18 +6,17 @@
 
 #include "common/common.h"
 #include "common/rigid_transform.h"
-#include "common/time_def.h"
+#include "common/time.h"
 
 template <typename T>
 struct TimestampedPointCloud {
   using PointCloudType    = pcl::PointCloud<T>;
   using PointCloudTypePtr = typename PointCloudType::Ptr;
 
-  Time timestamp;
+  Time time;
   std::string frame_id;
   Rigid3d odom_pose;
   Rigid3d map_pose;
-  Quaternion<double> imu_rotation;
 
   PointCloudTypePtr cloud_full_res;
   PointCloudTypePtr cloud_corner_sharp;
@@ -26,12 +25,20 @@ struct TimestampedPointCloud {
   PointCloudTypePtr cloud_surf_less_flat;
 
   TimestampedPointCloud()
-      : imu_rotation(Quaterniond::Identity()),
-        cloud_full_res(new PointCloudType),
+      : cloud_full_res(new PointCloudType),
         cloud_corner_sharp(new PointCloudType),
         cloud_corner_less_sharp(new PointCloudType),
         cloud_surf_flat(new PointCloudType),
         cloud_surf_less_flat(new PointCloudType) {}
+
+  TimestampedPointCloud<T> CopyAllFieldsWithoudCloud() const {
+    TimestampedPointCloud<T> cloud_out;
+    cloud_out.time      = this->time;
+    cloud_out.frame_id  = this->frame_id;
+    cloud_out.odom_pose = this->odom_pose;
+    cloud_out.map_pose  = this->map_pose;
+    return cloud_out;
+  }
 };
 
 struct OdometryData {

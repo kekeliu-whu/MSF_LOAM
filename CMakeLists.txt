@@ -3,6 +3,9 @@ cmake_policy(SET CMP0048 NEW)
 project(msf_loam_velodyne VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 14)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "-Wthread-safety")
+endif()
 
 #add_definitions(-D_SIM_GPS)
 
@@ -20,6 +23,7 @@ find_package(PCL REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(fmt REQUIRED)
+find_package(absl REQUIRED)
 
 if (Protobuf_VERBOSE)
     message(STATUS "Using Protocol Buffers ${protobuf_VERSION}")
@@ -43,11 +47,11 @@ catkin_package(
 
 set(
     PROJECT_SRCS
-    src/common/time_def.cc
+    src/common/time.cc
     src/slam/hybrid_grid.cc
-    src/slam/imu_fusion/imu_tracker.cc
     src/slam/imu_fusion/initial_ex_rotation.cc
     src/slam/imu_fusion/pose_local_parameterization.cc
+    src/slam/imu_fusion/scan_undistortion.cc
     src/slam/msg_conversion.cc
     src/slam/gps_fusion/gps_fusion.cc
     src/slam/local/laser_mapping.cc
@@ -64,14 +68,14 @@ add_executable(msf_loam_node
     ${PROJECT_SRCS}
     ${PROTO_SRCS}
 )
-target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES})
+target_link_libraries(msf_loam_node ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES} fmt absl::synchronization)
 
 add_executable(calib_lidar_imu
     src/calib_lidar_imu.cc
     ${PROJECT_SRCS}
     ${PROTO_SRCS}
 )
-target_link_libraries(calib_lidar_imu ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES} fmt)
+target_link_libraries(calib_lidar_imu ${catkin_LIBRARIES} ${CERES_LIBRARIES} ${PCL_LIBRARIES} ${Protobuf_LIBRARIES} fmt absl::synchronization)
 
 add_executable(kitti_helper src/slam/kitti_helper.cc)
 target_link_libraries(kitti_helper ${catkin_LIBRARIES} ${PCL_LIBRARIES})

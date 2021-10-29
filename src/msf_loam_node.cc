@@ -39,7 +39,6 @@
 #include <pcl/PCLPointCloud2.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <ros/ros.h>
 #include <rosbag/bag.h>
@@ -47,14 +46,9 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <Eigen/Eigen>
-#include <cmath>
-#include <pcl/impl/point_types.hpp>
-#include <string>
-#include <vector>
 
 #include "common/common.h"
 #include "common/tic_toc.h"
-#include "slam/imu_fusion/imu_tracker.h"
 #include "slam/local/laser_odometry.h"
 #include "slam/msg_conversion.h"
 
@@ -84,10 +78,11 @@ enum class PointLabel {
   P_FLAT,
 };
 
-const int kDefaultScanNum = 16;
-const double kScanPeriod  = 0.1;  // 扫描周期
-double g_min_range;               // 最小扫描距离
-int g_scan_num;                   // 扫描线数
+const int kMaxScanNum    = 128;
+const double kScanPeriod = 0.1;  // 扫描周期
+double g_min_range;              // 最小扫描距离
+std::uint64_t g_imu_msgs_num = 0;
+sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
 
 template <typename PointT>
 void RemoveInvalidPointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
@@ -132,15 +127,42 @@ void VoxelGridWrapper(const pcl::PointCloud<pointT> &cloud_in, pcl::PointCloud<p
   pcl::copyPointCloud(cloud_in, *indices, cloud_out);
 }
 
+void ComputeRelaTimeForEachPoint(const PointCloudOriginal &laser_cloud_in, std::vector<PointCloudOriginal> &cloud_with_relative_time) {
+  // lack of timestamp offset of first point/package.
+  // todo will cause if timestamp offset of first point/package is not tiny.
+  double start_ori = -atan2(laser_cloud_in.front().y, laser_cloud_in.front().x);
+
+  std::vector<double> last_relative_angles(cloud_with_relative_time.size(), -1);
+  for (int i = 0; i < laser_cloud_in.size(); i++) {
+    PointTypeOriginal point = laser_cloud_in[i];
+    CHECK_LT(point.ring, cloud_with_relative_time.size());
+
+    // ring point are not ordered in CCW
+    double ori = -atan2(point.y, point.x);
+
+    // clamp angle to [0, 2*pi)
+    double relative_angle = std::fmod(ori - start_ori + 2 * M_PI, 2 * M_PI);
+    // LOG(INFO) << point.ring << " " << relative_angle;
+
+    if (relative_angle < last_relative_angles[point.ring]) {
+      // relative_angle might be over 2*pi
+      relative_angle += 2 * M_PI;
+    }
+    last_relative_angles[point.ring] = relative_angle;
+
+    double rela_time = relative_angle / (2 * M_PI) * kScanPeriod;
+    point.time       = static_cast<float>(rela_time);
+    cloud_with_relative_time[point.ring].push_back(point);
+  }
+}
+
 }  // namespace
 
-void HandleLaserCloudMessage(
+void RealHandleLaserCloudMessage(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   TicToc t_whole;
   TicToc t_prepare;
-  std::vector<int> scan_start_indices(g_scan_num, 0);
-  std::vector<int> scan_end_indices(g_scan_num, 0);
 
   pcl::PointCloud<PointTypeOriginal> laser_cloud_in;
   pcl::fromROSMsg(*laser_cloud_msg, laser_cloud_in);
@@ -149,52 +171,25 @@ void HandleLaserCloudMessage(
   RemoveInvalidPointsFromCloud(laser_cloud_in, laser_cloud_in, g_min_range);
 
   // 2. compute point rel_time
-  int cloudSize   = laser_cloud_in.size();
-  double startOri = -atan2(laser_cloud_in.front().y, laser_cloud_in.front().x);
-  double endOri   = -atan2(laser_cloud_in.back().y, laser_cloud_in.back().x) + 2 * M_PI;
-
-  if (endOri - startOri > 3 * M_PI) {
-    endOri -= 2 * M_PI;
-  } else if (endOri - startOri < M_PI) {
-    endOri += 2 * M_PI;
-  }
-
-  bool halfPassed = false;
-  std::vector<PointCloudOriginal> laserCloudScans(g_scan_num);
-  for (int i = 0; i < cloudSize; i++) {
-    PointTypeOriginal point = laser_cloud_in[i];
-    CHECK_LT(point.ring, laserCloudScans.size());
-
-    double ori = -atan2(point.y, point.x);
-    if (!halfPassed) {
-      if (ori < startOri - M_PI / 2) {
-        ori += 2 * M_PI;
-      } else if (ori > startOri + M_PI * 3 / 2) {
-        ori -= 2 * M_PI;
-      }
-
-      if (ori - startOri > M_PI) {
-        halfPassed = true;
-      }
-    } else {
-      ori += 2 * M_PI;
-      if (ori < endOri - M_PI * 3 / 2) {
-        ori += 2 * M_PI;
-      } else if (ori > endOri + M_PI / 2) {
-        ori -= 2 * M_PI;
-      }
-    }
-
-    // 密度的整数部分为scan_id，浮点部分为点在当前帧的时间偏移
-    double rela_time = (ori - startOri) / (endOri - startOri);
-    point.time       = static_cast<float>(rela_time);
-    laserCloudScans[point.ring].push_back(point);
-  }
-
+  int cloudSize = laser_cloud_in.size();
   LOG(INFO) << "[REG] Valid Cloud size: " << cloudSize;
 
+  std::vector<PointCloudOriginal> laserCloudScans(kMaxScanNum);
+  ComputeRelaTimeForEachPoint(laser_cloud_in, laserCloudScans);
+  int valid_scan_num = 0;
+  for (int i = kMaxScanNum; i > 0; --i) {
+    if (!laserCloudScans[i - 1].empty()) {
+      valid_scan_num = i;
+      break;
+    }
+  }
+  // todo check
+  CHECK_GT(valid_scan_num, 0);
+
+  std::vector<int> scan_start_indices(valid_scan_num, 0);
+  std::vector<int> scan_end_indices(valid_scan_num, 0);
   PointCloudOriginalPtr laser_cloud(new PointCloudOriginal);
-  for (int i = 0; i < g_scan_num; i++) {
+  for (int i = 0; i < valid_scan_num; i++) {
     scan_start_indices[i] = laser_cloud->size() + 5;
     *laser_cloud += laserCloudScans[i];
     scan_end_indices[i] = static_cast<int>(laser_cloud->size()) - 6;
@@ -254,7 +249,7 @@ void HandleLaserCloudMessage(
 
   double t_q_sort = 0;
   // 提取每帧扫描线中的特征点
-  for (int i = 0; i < g_scan_num; i++) {
+  for (int i = 0; i < valid_scan_num; i++) {
     if (scan_end_indices[i] - scan_start_indices[i] < 6) continue;
     PointCloudOriginalPtr surfPointsLessFlatScan(new PointCloudOriginal);
     // 将每条扫描线分成6片，对每片提取特征点
@@ -359,7 +354,7 @@ void HandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
   TimestampedPointCloud<PointTypeOriginal> scan;
-  scan.timestamp               = FromRos(laser_cloud_msg->header.stamp);
+  scan.time                    = FromRos(laser_cloud_msg->header.stamp);
   scan.cloud_full_res          = laser_cloud;
   scan.cloud_surf_less_flat    = cloud_surf_less_flat;
   scan.cloud_surf_flat         = cloud_surf_flat;
@@ -372,9 +367,25 @@ void HandleLaserCloudMessage(
       << "Scan registration process over 100ms";
 }
 
+void TryHandleLaserCloudMessageWithImuIntegrated(
+    const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
+    const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
+  // todo remove magic number
+  if (g_imu_msgs_num <= 200) {
+    LOG(WARNING) << "Waiting for imu data...";
+    return;
+  }
+  if (g_prev_laser_cloud_msgs) {
+    // delay to handle laser message for retrieving imu data
+    RealHandleLaserCloudMessage(g_prev_laser_cloud_msgs, laser_odometry_handler);
+  }
+  g_prev_laser_cloud_msgs = laser_cloud_msg;
+}
+
 void HandleImuMessage(
     const sensor_msgs::ImuConstPtr &imu_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
+  g_imu_msgs_num++;
   ImuData imu_data;
   imu_data.time = FromRos(imu_msg->header.stamp);
   imu_data.linear_acceleration << imu_msg->linear_acceleration.x,
@@ -405,12 +416,8 @@ int main(int argc, char **argv) {
   ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
 
-  LOG_IF(WARNING, !nh.param<int>("scan_line", g_scan_num, kDefaultScanNum))
-      << "Use default scan_line: " << kDefaultScanNum;
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
       << "Use default minimum_range: 0.3";
-  CHECK(g_scan_num == 16 || g_scan_num == 32 || g_scan_num == 64)
-      << "only support velodyne with 16, 32 or 64 scan line!";
 
   auto laser_odometry_handler =
       std::make_shared<LaserOdometry>(FLAGS_is_offline_mode);
@@ -423,8 +430,8 @@ int main(int argc, char **argv) {
     LOG(INFO) << "Reading bag file " << FLAGS_bag_filename << " ...";
     for (auto &m : rosbag::View(bag)) {
       if (m.isType<sensor_msgs::PointCloud2>()) {
-        HandleLaserCloudMessage(m.instantiate<sensor_msgs::PointCloud2>(),
-                                laser_odometry_handler);
+        TryHandleLaserCloudMessageWithImuIntegrated(m.instantiate<sensor_msgs::PointCloud2>(),
+                                                    laser_odometry_handler);
       } else if (m.isType<sensor_msgs::Imu>()) {
         HandleImuMessage(m.instantiate<sensor_msgs::Imu>(),
                          laser_odometry_handler);
@@ -436,16 +443,16 @@ int main(int argc, char **argv) {
     bag.close();
   } else {
     LOG_IF(WARNING, !FLAGS_bag_filename.empty())
-        << "Offline mode is on, so bag_filename will be ignored.";
+        << "Online mode is enabled, so the parameter 'bag_filename' will be ignored.";
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(
-        "/velodyne_points", 10,
-        boost::bind(HandleLaserCloudMessage, _1,
+        "/velodyne_points", 100,
+        boost::bind(TryHandleLaserCloudMessageWithImuIntegrated, _1,
                     boost::ref(laser_odometry_handler)));
     ros::Subscriber subImu = nh.subscribe<sensor_msgs::Imu>(
-        "/imu", 10,
+        "/imu", 1000,
         boost::bind(HandleImuMessage, _1, boost::ref(laser_odometry_handler)));
     ros::Subscriber subOdom = nh.subscribe<nav_msgs::Odometry>(
-        "/odometry_gt", 10,
+        "/odometry_gt", 100,
         boost::bind(HandleOdomMessage, _1, boost::ref(laser_odometry_handler)));
     ros::spin();
   }

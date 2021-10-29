@@ -1,6 +1,6 @@
 #include <ostream>
 
-#include "common/time_def.h"
+#include "common/time.h"
 
 Duration FromSeconds(double seconds) {
   return std::chrono::duration_cast<Duration>(
