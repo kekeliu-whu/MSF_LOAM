@@ -389,9 +389,11 @@ void HandleImuMessage(
   ImuData imu_data;
   imu_data.time = FromRos(imu_msg->header.stamp);
   imu_data.linear_acceleration << imu_msg->linear_acceleration.x,
-      imu_msg->linear_acceleration.y, imu_msg->linear_acceleration.z;
+      imu_msg->linear_acceleration.y,
+      imu_msg->linear_acceleration.z;
   imu_data.angular_velocity << imu_msg->angular_velocity.x,
-      imu_msg->angular_velocity.y, imu_msg->angular_velocity.z;
+      imu_msg->angular_velocity.y,
+      imu_msg->angular_velocity.z;
   laser_odometry_handler->AddImu(imu_data);
 }
 

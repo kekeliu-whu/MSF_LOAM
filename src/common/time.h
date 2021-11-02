@@ -2,6 +2,7 @@
 #define MSF_LOAM_VELODYNE_TIME_H
 
 #include <chrono>
+#include <ostream>
 
 struct UniversalTimeScaleClock {
   using rep        = int64_t;

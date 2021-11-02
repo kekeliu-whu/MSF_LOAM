@@ -5,6 +5,7 @@
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
 #include <tf/transform_broadcaster.h>
+#include <boost/optional/optional.hpp>
 #include <condition_variable>
 #include <queue>
 #include <thread>
@@ -16,8 +17,7 @@
 #include "slam/hybrid_grid.h"
 #include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/scan_matcher.h"
-
-using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
+#include "slam/estimator/estimator.h"
 
 class LaserMapping {
  public:
@@ -69,6 +69,9 @@ class LaserMapping {
 
   absl::Mutex mtx_odometry_result_queue_;
   std::queue<LaserOdometryResultType> odometry_result_queue_ ABSL_GUARDED_BY(mtx_odometry_result_queue_);
+  boost::optional<LaserOdometryResultType> prev_odometry_result_;
+
+  Estimator estimator;
 
   HybridGrid hybrid_grid_map_corner_;
   HybridGrid hybrid_grid_map_surf_;

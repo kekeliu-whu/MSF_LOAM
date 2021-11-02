@@ -33,8 +33,8 @@ inline typename pcl::PointCloud<T>::Ptr TransformPointCloud(const typename pcl::
 }  // namespace
 
 // todo
-double ACC_N, ACC_W;
-double GYR_N, GYR_W;
+double ACC_N = 0.017, ACC_W = 0.007;
+double GYR_N = 0.0033, GYR_W = 0.0012;
 Eigen::Vector3d G;
 
 LaserMapping::LaserMapping(bool is_offline_mode)
@@ -184,9 +184,19 @@ void LaserMapping::Run() {
     gps_fusion_handler_->AddLocalPose(odom_result.time,
                                       pose_map_scan2world_);
 
+    odom_result.map_pose = pose_map_scan2world_;
     PublishTrajectory(odom_result);
 
     PublishScan(odom_result);
+
+    // todo init bias and gravity vector by set device still
+    {
+      absl::MutexLock lg(&mtx_imu_buf_);
+      if (prev_odometry_result_.is_initialized()) {
+        estimator.AddData(prev_odometry_result_.get(), odom_result, imu_buf_);
+      }
+    }
+    prev_odometry_result_ = odom_result;
 
     auto odom_msg = pb_data_.add_odom_datas();
     odom_msg->set_timestamp(ToUniversal(odom_result.time));
@@ -315,20 +325,18 @@ void LaserMapping::UndistortScan(
     LaserOdometryResultType &laser_odometry_result_deskewed) {
   auto it                      = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
   double lidar_imu_time_offset = ToSeconds(it->time - laser_odometry_result.time);
-  auto idx                     = std::distance(imu_buf.begin(), it);
+  auto si                      = std::distance(imu_buf.begin(), it);
   LOG_IF(ERROR, lidar_imu_time_offset >= 0.01)
       << fmt::format(
-             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={} prev_imu={}",
+             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={}",
              lidar_imu_time_offset,
-             imu_buf[idx].time,
-             imu_buf[idx - 1].time,
+             imu_buf[si].time,
              laser_odometry_result.time);
-  // todo add doc
-  auto imu_preintegration = std::make_unique<IntegrationBase>(imu_buf[idx].linear_acceleration, imu_buf[idx].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
-  imu_preintegration->push_back(ToSeconds(imu_buf[idx].time - laser_odometry_result.time), imu_buf[idx].linear_acceleration, it->angular_velocity);
-  // todo sync imu_buf
-  for (; idx < imu_buf.size() - 1; ++idx) {
-    imu_preintegration->push_back(ToSeconds(imu_buf[idx + 1].time - imu_buf[idx].time), imu_buf[idx + 1].linear_acceleration, imu_buf[idx + 1].angular_velocity);
+  auto imu_preintegration = std::make_unique<IntegrationBase>(imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
+  // add first phony imu data for time sync
+  imu_preintegration->push_back(ToSeconds(imu_buf[si].time - laser_odometry_result.time), imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity);
+  for (size_t i = si; i < imu_buf.size() - 1; ++i) {
+    imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
   }
   ScanUndistortionUtils::DoUndistort(laser_odometry_result, *imu_preintegration, laser_odometry_result_deskewed);
 }
@@ -336,6 +344,9 @@ void LaserMapping::UndistortScan(
 void LaserMapping::AddImu(const ImuData &imu_data) {
   {
     absl::MutexLock lg(&mtx_imu_buf_);
+    if (!imu_buf_.empty()) {
+      LOG_IF(ERROR, imu_buf_.back().time >= imu_data.time);
+    }
     imu_buf_.push_back(imu_data);
   }
 

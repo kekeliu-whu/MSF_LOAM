@@ -33,6 +33,7 @@ class IntegrationBase {
   }
 
   void push_back(double dt, const Eigen::Vector3d &acc, const Eigen::Vector3d &gyr) {
+    if (dt == 0) return;
     dt_buf_.push_back(dt);
     acc_buf_.push_back(acc);
     gyr_buf_.push_back(gyr);
