@@ -193,7 +193,7 @@ void LaserMapping::Run() {
     {
       absl::MutexLock lg(&mtx_imu_buf_);
       if (prev_odometry_result_.is_initialized()) {
-        estimator.AddData(prev_odometry_result_.get(), odom_result, imu_buf_);
+        estimator.AddData(prev_odometry_result_.get(), odom_result.time, imu_buf_);
       }
     }
     prev_odometry_result_ = odom_result;

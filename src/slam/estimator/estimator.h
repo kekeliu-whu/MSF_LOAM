@@ -1,8 +1,6 @@
 #pragma once
 
 #include <ceres/ceres.h>
-#include <ceres/local_parameterization.h>
-#include <ceres/solver.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
@@ -71,12 +69,15 @@ class Estimator {
  public:
   Estimator() = default;
 
-  void AddData(const LaserOdometryResultType &prev_odom, const LaserOdometryResultType &curr_odom, const std::vector<ImuData> &imu_buf) {
+  void AddData(
+      const LaserOdometryResultType &prev_odom,
+      const Time &curr_odom_time,
+      const std::vector<ImuData> &imu_buf) {
     // first imu which timestamp GE than cur_odom.time
     // first imu data where t >= prev_odom.time
     auto it_start = std::upper_bound(imu_buf.begin(), imu_buf.end(), prev_odom.time, [](const Time &t, const ImuData &imu) { return t < imu.time; });
     // first imu data where t >= cur_odom.time
-    auto it_end                  = std::upper_bound(imu_buf.begin(), imu_buf.end(), curr_odom.time, [](const Time &t, const ImuData &imu) { return t < imu.time; });
+    auto it_end                  = std::upper_bound(imu_buf.begin(), imu_buf.end(), curr_odom_time, [](const Time &t, const ImuData &imu) { return t < imu.time; });
     double lidar_imu_time_offset = ToSeconds(it_start->time - prev_odom.time);
     auto si                      = std::distance(imu_buf.begin(), it_start);
     auto ei                      = std::distance(imu_buf.begin(), it_end);
@@ -94,11 +95,10 @@ class Estimator {
       imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
     }
     // add last fake imu measurement for lidar-imu sync
-    CHECK_GT(ToSeconds(curr_odom.time - imu_buf[ei - 1].time), 0);
-    imu_preintegration->push_back(ToSeconds(curr_odom.time - imu_buf[ei - 1].time), imu_buf[ei - 1].linear_acceleration, imu_buf[ei - 1].angular_velocity);
+    imu_preintegration->push_back(ToSeconds(curr_odom_time - imu_buf[ei - 1].time), imu_buf[ei - 1].linear_acceleration, imu_buf[ei - 1].angular_velocity);
 
     if (!obs_.empty()) {
-      // CHECK_EQ(obs_.back().time, prev_odom.time);
+      CHECK_DOUBLE_EQ(ToSeconds(prev_odom.time - obs_.back().time), obs_.back().imu_preintegration->sum_dt_);
     }
     auto ob               = ObservationRigid{};
     ob.time               = prev_odom.time;

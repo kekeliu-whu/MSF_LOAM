@@ -14,7 +14,7 @@
 #include "common/timestamped_pointcloud.h"
 #include "msg.pb.h"
 #include "slam/gps_fusion/gps_fusion.h"
-#include "slam/hybrid_grid.h"
+#include "slam/map/hybrid_grid.h"
 #include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/scan_matcher.h"
 #include "slam/estimator/estimator.h"
