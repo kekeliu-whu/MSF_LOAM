@@ -10,6 +10,7 @@
 #include "common/timestamped_pointcloud.h"
 #include "slam/imu_fusion/integration_base.h"
 #include "slam/imu_fusion/types.h"
+#include "slam/local/scan_matching/scan_matcher.h"
 
 using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
 
@@ -108,7 +109,8 @@ class Estimator {
     obs_.push_back(ob);
 
     // todo do not use magic number here
-    if (obs_.size() == 100) {
+    int nums = 50;
+    if (obs_.size() == nums) {
       Vector3d G{0, 0, 9.8055};
       ceres::Problem problem;
       problem.AddParameterBlock(G.data(), 3, new ceres::HomogeneousVectorParameterization(3));
@@ -128,13 +130,15 @@ class Estimator {
       ceres::Solver::Options options;
       options.minimizer_progress_to_stdout = true;
       ceres::Solver::Summary summary;
+
+      // first optimal
+      ceres::Solve(options, &problem, &summary);
+      // second optimal after rejecting outliers
+      ScanMatcher::RefineByRejectOutliersWithFrac(problem, 6, 0.15);
       ceres::Solve(options, &problem, &summary);
 
       // todo
       LOG(WARNING) << G.transpose();
-      for (auto e : obs_) {
-        LOG(WARNING) << e.time << " " << e.v.transpose();
-      }
       LOG(FATAL) << summary.FullReport();
     }
   }

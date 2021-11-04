@@ -277,7 +277,7 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
     ceres::Solver::Summary summary;
     ceres::Solve(options, &problem, &summary);
     if (opti_counter == kOptimalNum - 1) {
-      this->RefinePoseByRejectOutliers(problem);
+      this->RefineByRejectOutliersWithThreshold(problem, 1);
     }
     LOG_STEP_TIME("ODO", "Solver time", t_solver.toc());
   }

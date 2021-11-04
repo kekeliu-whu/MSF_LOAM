@@ -19,7 +19,11 @@ class ScanMatcher {
                              const TimestampedPointCloud<PointType> &cloud2,
                              Rigid3d *pose_estimate_map_scan2world) = 0;
 
-  void RefinePoseByRejectOutliers(ceres::Problem &problem);
+  // Reject outliers instead of using loss function,
+  // because of possible result instability caused by outliers.
+  static void RefineByRejectOutliersWithThreshold(ceres::Problem &problem, int residual_block_size, double threshold = 0.2);
+
+  static void RefineByRejectOutliersWithFrac(ceres::Problem &problem, int residual_block_size, double frac);
 
   virtual ~ScanMatcher() = default;
 };

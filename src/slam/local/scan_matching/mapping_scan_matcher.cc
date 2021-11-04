@@ -141,10 +141,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     options.max_num_iterations           = 6;
     options.minimizer_progress_to_stdout = false;
     ceres::Solver::Summary summary;
-    ceres::Solve(options, &problem, &summary);
     if (iterCount == kOptimalNum - 1) {
-      this->RefinePoseByRejectOutliers(problem);
+      this->RefineByRejectOutliersWithThreshold(problem, 1);
     }
+    ceres::Solve(options, &problem, &summary);
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
   }
   LOG_STEP_TIME("MAP", "Optimization twice", t_opt.toc());
