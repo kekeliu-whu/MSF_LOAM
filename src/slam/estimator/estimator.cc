@@ -87,8 +87,7 @@ void Estimator::AddData(
   obs_.push_back(ob);
 
   // todo do not use magic number here
-  int nums = 50;
-  if (obs_.size() == nums) {
+  if (obs_.size() == kInitByFirstScanNums) {
     ceres::Problem problem;
     problem.AddParameterBlock(gravity_.data(), 3, new ceres::HomogeneousVectorParameterization(3));
     for (int i = 0; i < obs_.size() - 1; ++i) {
@@ -114,8 +113,41 @@ void Estimator::AddData(
     ScanMatcher::RefineByRejectOutliersWithFrac(problem, 6, 0.15);
     ceres::Solve(options, &problem, &summary);
 
-    // todo
-    LOG(WARNING) << gravity_.transpose();
-    LOG(FATAL) << summary.FullReport();
+    LOG(WARNING) << "Gravity and velocity init done, G=" << gravity_.transpose() << "\n, report=\n"
+                 << summary.FullReport();
+
+    // todo kk init failed condition?
+    this->is_initialized_ = true;
+  }
+
+  if (obs_.size() > kInitByFirstScanNums) {
+    ceres::Problem problem;
+    // todo kk
+    for (size_t i = obs_.size() - 50; i < obs_.size() - 1; ++i) {
+      problem.AddResidualBlock(
+          VelocityGravityInitFactor::Create(
+              obs_[i].pose,
+              obs_[i + 1].pose,
+              ToSeconds(obs_[i + 1].time - obs_[i].time),
+              obs_[i].imu_preintegration->delta_p_,
+              obs_[i].imu_preintegration->delta_v_),
+          nullptr,
+          gravity_.data(),
+          obs_[i].velocity.data(),
+          obs_[i + 1].velocity.data());
+    }
+    problem.SetParameterBlockConstant(gravity_.data());
+    ceres::Solver::Options options;
+    options.minimizer_progress_to_stdout = false;
+    ceres::Solver::Summary summary;
+
+    // first optimal
+    ceres::Solve(options, &problem, &summary);
+    // second optimal after rejecting outliers
+    ScanMatcher::RefineByRejectOutliersWithFrac(problem, 6, 0.15);
+    ceres::Solve(options, &problem, &summary);
+
+    LOG(WARNING) << "Gravity and velocity init done, G=" << gravity_.transpose() << "\n, report=\n"
+                 << summary.FullReport();
   }
 }

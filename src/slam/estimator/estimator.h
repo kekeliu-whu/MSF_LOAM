@@ -30,6 +30,10 @@ class Estimator {
 
   virtual ~Estimator() = default;
 
+  // Add lidar odometry result and next lidar time
+  // 1. Collect imu preintegration measurements and add push it to obs_;
+  // 2. Init velocity-gravity when obs_.size()<kInitByFirstScanNums;
+  // 3. Update velocity when obs_.size()>=kInitByFirstScanNums.
   void AddData(
       const LaserOdometryResultType &prev_odom,
       const Time &curr_odom_time,
@@ -42,4 +46,6 @@ class Estimator {
   std::vector<ObservationRigid> obs_;
   Vector3d gravity_;
   bool is_initialized_;
+
+  const int kInitByFirstScanNums = 50;
 };
