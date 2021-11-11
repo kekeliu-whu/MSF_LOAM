@@ -53,6 +53,7 @@ set(
     src/slam/imu_fusion/scan_undistortion.cc
     src/slam/map/hybrid_grid.cc
     src/slam/msg_conversion.cc
+    src/slam/estimator/estimator.cc
     src/slam/gps_fusion/gps_fusion.cc
     src/slam/local/laser_mapping.cc
     src/slam/local/laser_odometry.cc
