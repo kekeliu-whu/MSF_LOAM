@@ -14,26 +14,27 @@ void ScanMatcher::RefineByRejectOutliersWithThreshold(
     ceres::Problem &problem,
     int residual_block_size,
     double threshold) {
-  std::vector<ceres::ResidualBlockId> residual_block_ids;
-  problem.GetResidualBlocks(&residual_block_ids);
+  // todo kk
+  // std::vector<ceres::ResidualBlockId> residual_block_ids;
+  // problem.GetResidualBlocks(&residual_block_ids);
 
-  std::vector<double> residuals;
-  ceres::Problem::EvaluateOptions evaluate_option;
-  evaluate_option.apply_loss_function = false;
-  problem.Evaluate(evaluate_option, nullptr, &residuals, nullptr, nullptr);
+  // std::vector<double> residuals;
+  // ceres::Problem::EvaluateOptions evaluate_option;
+  // evaluate_option.apply_loss_function = false;
+  // problem.Evaluate(evaluate_option, nullptr, &residuals, nullptr, nullptr);
 
-  CHECK_EQ(residual_block_size * residual_block_ids.size(), residuals.size());
+  // CHECK_EQ(residual_block_size * residual_block_ids.size(), residuals.size());
 
-  int outlier_count = 0;
-  for (int i = 0; i < residual_block_ids.size(); ++i) {
-    Eigen::Map<Eigen::VectorXd> v(&residuals[i * residual_block_size], residual_block_size);
-    if (v.norm() > kResidualThreshold) {
-      problem.RemoveResidualBlock(residual_block_ids[i]);
-      ++outlier_count;
-    }
-  }
-  LOG(INFO) << outlier_count << " outliers removed from "
-            << residual_block_ids.size() << " PL/PP match pairs with threshold " << kResidualThreshold;
+  // int outlier_count = 0;
+  // for (int i = 0; i < residual_block_ids.size(); ++i) {
+  //   Eigen::Map<Eigen::VectorXd> v(&residuals[i * residual_block_size], residual_block_size);
+  //   if (v.norm() > kResidualThreshold) {
+  //     problem.RemoveResidualBlock(residual_block_ids[i]);
+  //     ++outlier_count;
+  //   }
+  // }
+  // LOG(INFO) << outlier_count << " outliers removed from "
+  //           << residual_block_ids.size() << " PL/PP match pairs with threshold " << kResidualThreshold;
 }
 
 void ScanMatcher::RefineByRejectOutliersWithFrac(

@@ -22,7 +22,7 @@ bool LidarEdgeFactor::operator()(const T *q, const T *t, T *residual) const {
   Eigen::Matrix<T, 3, 1> nu = (lp - lpa).cross(lp - lpb);
   Eigen::Matrix<T, 3, 1> de = lpa - lpb;
 
-  residual[0] = nu.norm() / de.norm();
+  Eigen::Map<Eigen::Matrix<T, 3, 1>>{residual} = nu / de.norm();
 
   return true;
 }
@@ -30,14 +30,14 @@ bool LidarEdgeFactor::operator()(const T *q, const T *t, T *residual) const {
 template bool LidarEdgeFactor::operator()<double>(double const *,
                                                   double const *,
                                                   double *) const;
-template bool LidarEdgeFactor::operator()<ceres::Jet<double, 7> >(
+template bool LidarEdgeFactor::operator()<ceres::Jet<double, 7>>(
     ceres::Jet<double, 7> const *, ceres::Jet<double, 7> const *,
     ceres::Jet<double, 7> *) const;
 
 ceres::CostFunction *LidarEdgeFactor::Create(
     const Eigen::Vector3d &curr_point, const Eigen::Vector3d &last_point_a,
     const Eigen::Vector3d &last_point_b, const double s) {
-  return new ceres::AutoDiffCostFunction<LidarEdgeFactor, 1, 4, 3>(
+  return new ceres::AutoDiffCostFunction<LidarEdgeFactor, 3, 4, 3>(
       new LidarEdgeFactor(curr_point, last_point_a, last_point_b, s));
 }
 
@@ -64,7 +64,7 @@ bool LidarPlaneFactor::operator()(const T *q, const T *t, T *residual) const {
 template bool LidarPlaneFactor::operator()<double>(double const *,
                                                    double const *,
                                                    double *) const;
-template bool LidarPlaneFactor::operator()<ceres::Jet<double, 7> >(
+template bool LidarPlaneFactor::operator()<ceres::Jet<double, 7>>(
     ceres::Jet<double, 7> const *, ceres::Jet<double, 7> const *,
     ceres::Jet<double, 7> *) const;
 
