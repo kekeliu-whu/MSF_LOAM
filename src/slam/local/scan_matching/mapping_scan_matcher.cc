@@ -36,8 +36,8 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     ceres::Problem::Options problem_options;
 
     ceres::Problem problem(problem_options);
-    auto pose = pose_estimate_map_scan2world->ToVector7();
-    problem.AddParameterBlock(pose.data(), 7, se3_parameterization);
+    auto pose_params = pose_estimate_map_scan2world->ToVector7();
+    problem.AddParameterBlock(pose_params.data(), 7, se3_parameterization);
 
     TicToc t_data;
     int corner_num = 0;
@@ -82,7 +82,7 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
               new LidarEdgeFactorSE3(curr_point, point_a, (point_a - point_b).normalized());
           problem.AddResidualBlock(
               cost_function, loss_function,
-              pose.data());
+              pose_params.data());
           corner_num++;
         }
       }
@@ -124,7 +124,7 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
               new LidarPlaneFactorSE3(curr_point, center, norm);
           problem.AddResidualBlock(
               cost_function, loss_function,
-              pose.data());
+              pose_params.data());
           surf_num++;
         }
       }
@@ -143,8 +143,8 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     ceres::Solve(options, &problem, &summary);
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
 
-    // attention: update by optimized pose(vector7)
-    *pose_estimate_map_scan2world = Rigid3d{pose};
+    // attention: update by optimized pose_params(vector7)
+    *pose_estimate_map_scan2world = pose_params;
   }
   LOG_STEP_TIME("MAP", "Optimization twice", t_opt.toc());
 

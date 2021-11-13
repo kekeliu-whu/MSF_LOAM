@@ -8,6 +8,7 @@
 #include "common/tic_toc.h"
 #include "lidar_factor.h"
 #include "odometry_scan_matcher.h"
+#include "slam/imu_fusion/pose_local_parameterization.h"
 
 namespace {
 
@@ -63,16 +64,13 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
   for (size_t opti_counter = 0; opti_counter < kOptimalNum; ++opti_counter) {
     int corner_correspondence = 0, plane_correspondence = 0;
 
-    ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
-    ceres::LocalParameterization *q_parameterization =
-        new ceres::EigenQuaternionParameterization();
+    ceres::LossFunction *loss_function                 = new ceres::HuberLoss(0.1);
+    ceres::LocalParameterization *se3_parameterization = new PoseLocalParameterization();
+    auto pose_params                                   = pose_estimate_curr2last->ToVector7();
     ceres::Problem::Options problem_options;
 
     ceres::Problem problem(problem_options);
-    problem.AddParameterBlock(
-        pose_estimate_curr2last->rotation().coeffs().data(), 4,
-        q_parameterization);
-    problem.AddParameterBlock(pose_estimate_curr2last->translation().data(), 3);
+    problem.AddParameterBlock(pose_params.data(), 7, se3_parameterization);
 
     PointTypeOriginal pointSel;
     std::vector<int> pointSearchInd;
@@ -156,11 +154,10 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
 
         double s = 1.0;
         ceres::CostFunction *cost_function =
-            LidarEdgeFactor::Create(curr_point, last_point_a, last_point_b, s);
+            new LidarEdgeFactorSE3(curr_point, last_point_a, (last_point_a - last_point_b).normalized());
         problem.AddResidualBlock(
             cost_function, loss_function,
-            pose_estimate_curr2last->rotation().coeffs().data(),
-            pose_estimate_curr2last->translation().data());
+            pose_params.data());
         corner_correspondence++;
       }
     }
@@ -249,13 +246,12 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
                                        cloud_surf_last->points[minPointInd3].y,
                                        cloud_surf_last->points[minPointInd3].z);
 
-          double s                           = 1.0;
-          ceres::CostFunction *cost_function = LidarPlaneFactor::Create(
-              curr_point, last_point_a, last_point_b, last_point_c, s);
+          double s = 1.0;
+          ceres::CostFunction *cost_function =
+              new LidarPlaneFactorSE3(curr_point, last_point_a, last_point_b, last_point_c);
           problem.AddResidualBlock(
               cost_function, loss_function,
-              pose_estimate_curr2last->rotation().coeffs().data(),
-              pose_estimate_curr2last->translation().data());
+              pose_params.data());
           plane_correspondence++;
         }
       }
@@ -280,6 +276,8 @@ bool OdometryScanMatcher::MatchScan2Scan(const TimestampedPointCloud<PointTypeOr
       this->RefineByRejectOutliersWithThreshold(problem, 1);
     }
     LOG_STEP_TIME("ODO", "Solver time", t_solver.toc());
+
+    *pose_estimate_curr2last = pose_params;
   }
   LOG_STEP_TIME("ODO", "Optimization twice", t_opt.toc());
 
