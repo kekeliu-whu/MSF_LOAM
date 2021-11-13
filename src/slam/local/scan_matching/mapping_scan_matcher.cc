@@ -7,6 +7,7 @@
 #include "common/tic_toc.h"
 #include "lidar_factor.h"
 #include "mapping_scan_matcher.h"
+#include "slam/imu_fusion/pose_local_parameterization.h"
 
 namespace {
 constexpr int kOptimalNum = 2;
@@ -30,16 +31,13 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
   for (int iterCount = 0; iterCount < kOptimalNum; iterCount++) {
     // ceres::LossFunction *loss_function = NULL;
     ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
-    ceres::LocalParameterization *q_parameterization =
-        new ceres::EigenQuaternionParameterization();
+    ceres::LocalParameterization *se3_parameterization =
+        new PoseLocalParameterization();
     ceres::Problem::Options problem_options;
 
     ceres::Problem problem(problem_options);
-    problem.AddParameterBlock(
-        pose_estimate_map_scan2world->rotation().coeffs().data(), 4,
-        q_parameterization);
-    problem.AddParameterBlock(
-        pose_estimate_map_scan2world->translation().data(), 3);
+    auto pose = pose_estimate_map_scan2world->ToVector7();
+    problem.AddParameterBlock(pose.data(), 7, se3_parameterization);
 
     TicToc t_data;
     int corner_num = 0;
@@ -81,11 +79,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
           point_b = -0.1 * unit_direction + point_on_line;
 
           ceres::CostFunction *cost_function =
-              LidarEdgeFactor::Create(curr_point, point_a, point_b, 1.0);
+              new LidarEdgeFactorSE3(curr_point, point_a, (point_a - point_b).normalized());
           problem.AddResidualBlock(
               cost_function, loss_function,
-              pose_estimate_map_scan2world->rotation().coeffs().data(),
-              pose_estimate_map_scan2world->translation().data());
+              pose.data());
           corner_num++;
         }
       }
@@ -124,11 +121,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
         Eigen::Vector3d curr_point(pointOri.x, pointOri.y, pointOri.z);
         if (planeValid) {
           ceres::CostFunction *cost_function =
-              LidarPlaneFactor::Create(curr_point, center, norm);
+              new LidarPlaneFactorSE3(curr_point, center, norm);
           problem.AddResidualBlock(
               cost_function, loss_function,
-              pose_estimate_map_scan2world->rotation().coeffs().data(),
-              pose_estimate_map_scan2world->translation().data());
+              pose.data());
           surf_num++;
         }
       }
@@ -146,6 +142,9 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     }
     ceres::Solve(options, &problem, &summary);
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
+
+    // attention: update by optimized pose(vector7)
+    *pose_estimate_map_scan2world = Rigid3d{pose};
   }
   LOG_STEP_TIME("MAP", "Optimization twice", t_opt.toc());
 
