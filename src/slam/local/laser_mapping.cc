@@ -238,7 +238,8 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
     cloud_map.cloud_surf_less_flat    = laserCloudSurfFromMap;
     scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
     scan_curr.cloud_surf_less_flat    = laserCloudSurfLastStack;
-    scan_matcher_->MatchScan2Map(cloud_map, scan_curr, &pose_map_scan2world_);
+    std::shared_ptr<IntegrationBase> p(NULL);  // todo kk impl
+    scan_matcher_->MatchScan2Map(cloud_map, scan_curr, p, &pose_map_scan2world_);
   } else {
     LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
   }

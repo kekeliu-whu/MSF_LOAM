@@ -15,6 +15,7 @@ constexpr int kOptimalNum = 2;
 
 bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &cloud_map,
                                        const TimestampedPointCloud<PointType> &scan_curr,
+                                       const std::shared_ptr<IntegrationBase> &preintegration,
                                        Rigid3d *pose_estimate_map_scan2world) {
   TicToc t_opt;
   TicToc t_tree;

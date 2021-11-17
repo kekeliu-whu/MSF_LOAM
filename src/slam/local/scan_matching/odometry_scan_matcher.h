@@ -8,12 +8,6 @@ class OdometryScanMatcher : public ScanMatcher {
   virtual bool MatchScan2Scan(const TimestampedPointCloud<PointTypeOriginal> &cloud1,
                               const TimestampedPointCloud<PointTypeOriginal> &cloud2,
                               Rigid3d *pose_estimate_curr2last);
-
-  virtual bool MatchScan2Map(const TimestampedPointCloud<PointType> &cloud1,
-                             const TimestampedPointCloud<PointType> &cloud2,
-                             Rigid3d *pose_estimate_map_scan2world) {
-    exit(-1);  // todo use LOG(FATAL) here
-  }
 };
 
 inline PointCloudPtr ToPointType(const PointCloudOriginalConstPtr &pc_in) {
@@ -37,7 +31,7 @@ inline PointCloud ToPointType(const PointCloudOriginal &pc_in) {
 inline TimestampedPointCloud<PointType> ToPointType(const TimestampedPointCloud<PointTypeOriginal> &tpc_in) {
   TimestampedPointCloud<PointType> tpc_out;
   tpc_out.frame_id                = tpc_in.frame_id;
-  tpc_out.time               = tpc_in.time;
+  tpc_out.time                    = tpc_in.time;
   tpc_out.map_pose                = tpc_in.map_pose;
   tpc_out.odom_pose               = tpc_in.odom_pose;
   tpc_out.cloud_full_res          = ToPointType(tpc_in.cloud_full_res);

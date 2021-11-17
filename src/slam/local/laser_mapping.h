@@ -16,7 +16,7 @@
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/map/hybrid_grid.h"
 #include "slam/imu_fusion/types.h"
-#include "slam/local/scan_matching/scan_matcher.h"
+#include "slam/local/scan_matching/mapping_scan_matcher.h"
 #include "slam/estimator/estimator.h"
 
 class LaserMapping {
@@ -61,7 +61,7 @@ class LaserMapping {
 
  private:
   std::shared_ptr<GpsFusion> gps_fusion_handler_;
-  std::unique_ptr<ScanMatcher> scan_matcher_;
+  std::unique_ptr<MappingScanMatcher> scan_matcher_;
 
   int frame_idx_cur_;
 

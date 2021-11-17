@@ -6,7 +6,7 @@
 #include "common/timestamped_pointcloud.h"
 #include "laser_mapping.h"
 #include "slam/imu_fusion/types.h"
-#include "slam/local/scan_matching/scan_matcher.h"
+#include "slam/local/scan_matching/odometry_scan_matcher.h"
 
 class LaserOdometry {
  public:
@@ -25,7 +25,7 @@ class LaserOdometry {
 
  private:
   std::shared_ptr<LaserMapping> laser_mapper_handler_;
-  std::unique_ptr<ScanMatcher> scan_matcher_;
+  std::unique_ptr<OdometryScanMatcher> scan_matcher_;
 
   TimestampedPointCloud<PointTypeOriginal> scan_last_;
 
