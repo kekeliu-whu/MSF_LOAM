@@ -12,7 +12,9 @@ class MappingScanMatcher : public ScanMatcher {
  public:
   bool MatchScan2Map(const TimestampedPointCloud<PointType> &cloud1,
                      const TimestampedPointCloud<PointType> &cloud2,
+                     const bool is_initialized,
                      const std::shared_ptr<IntegrationBase> &preintegration,
+                     const Vector3d &gravity_vector,
                      Rigid3d *pose_estimate_map_scan2world);
 };
 

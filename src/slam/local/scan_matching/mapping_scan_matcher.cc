@@ -10,12 +10,32 @@
 #include "slam/imu_fusion/pose_local_parameterization.h"
 
 namespace {
+
 constexpr int kOptimalNum = 2;
+
+std::tuple<Quaterniond, Vector3d> GetDeltaQP(const std::shared_ptr<IntegrationBase> &preintegration, double dt) {
+  CHECK_GE(dt, 0);
+  auto sum_dt_buf = preintegration->sum_dt_buf_;
+  auto it         = std::upper_bound(sum_dt_buf.begin(), sum_dt_buf.end(), dt);
+  std::size_t idx = (it == sum_dt_buf.end())
+                        ? sum_dt_buf.size() - 2
+                        : std::distance(sum_dt_buf.begin(), it) - 1;
+  CHECK_GE(idx, 0);
+
+  double s = (dt - sum_dt_buf[idx]) / (sum_dt_buf[idx + 1] - sum_dt_buf[idx]);
+
+  auto q = preintegration->delta_q_buf_[idx].slerp(s, preintegration->delta_q_buf_[idx + 1]);
+  auto p = (1 - s) * preintegration->delta_p_buf_[idx] + s * preintegration->delta_p_buf_[idx + 1];
+  return {q, p};
 }
+
+}  // namespace
 
 bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &cloud_map,
                                        const TimestampedPointCloud<PointType> &scan_curr,
+                                       const bool is_initialized,
                                        const std::shared_ptr<IntegrationBase> &preintegration,
+                                       const Vector3d &gravity_vector,
                                        Rigid3d *pose_estimate_map_scan2world) {
   TicToc t_opt;
   TicToc t_tree;
@@ -79,8 +99,23 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
           point_a = 0.1 * unit_direction + point_on_line;
           point_b = -0.1 * unit_direction + point_on_line;
 
-          ceres::CostFunction *cost_function =
-              new LidarEdgeFactorSE3(curr_point, point_a, (point_a - point_b).normalized());
+          Quaterniond delta_q;
+          Vector3d delta_p;
+          auto dt                    = pointOri.intensity;
+          std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
+          ceres::CostFunction *cost_function;
+          if (is_initialized) {
+            cost_function = new LidarEdgeFactorDeskewSE3(
+                curr_point,
+                point_a,
+                (point_a - point_b).normalized(),
+                delta_p,
+                delta_q,
+                dt,
+                gravity_vector);
+          } else {
+            cost_function = new LidarEdgeFactorSE3(curr_point, point_a, (point_a - point_b).normalized());
+          }
           problem.AddResidualBlock(
               cost_function, loss_function,
               pose_params.data());
@@ -121,8 +156,23 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
         }
         Eigen::Vector3d curr_point(pointOri.x, pointOri.y, pointOri.z);
         if (planeValid) {
-          ceres::CostFunction *cost_function =
-              new LidarPlaneFactorSE3(curr_point, center, norm);
+          Quaterniond delta_q;
+          Vector3d delta_p;
+          auto dt                    = pointOri.intensity;
+          std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
+          ceres::CostFunction *cost_function;
+          if (is_initialized) {
+            cost_function = new LidarPlaneFactorDeskewSE3(
+                curr_point,
+                center,
+                norm,
+                delta_p,
+                delta_q,
+                dt,
+                gravity_vector);
+          } else {
+            cost_function = new LidarPlaneFactorSE3(curr_point, center, norm);
+          }
           problem.AddResidualBlock(
               cost_function, loss_function,
               pose_params.data());

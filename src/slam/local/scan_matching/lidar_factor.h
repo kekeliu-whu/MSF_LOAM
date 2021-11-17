@@ -26,7 +26,7 @@ struct LidarEdgeFactorSE3 : ceres::SizedCostFunction<3, 7> {
   static constexpr int kResidualNums = 3;
 };
 
-struct LidarEdgeFactorDeskewSE3 : ceres::SizedCostFunction<3, 7> {
+struct LidarEdgeFactorDeskewSE3 : ceres::SizedCostFunction<3, 7, 3> {
  public:
   LidarEdgeFactorDeskewSE3(const Eigen::Vector3d &curr_point,
                            const Eigen::Vector3d &last_line_C,
@@ -87,7 +87,7 @@ struct LidarPlaneFactorSE3 : ceres::SizedCostFunction<1, 7> {
   static constexpr int kResidualNums = 1;
 };
 
-struct LidarPlaneFactorDeskewSE3 : ceres::SizedCostFunction<1, 7> {
+struct LidarPlaneFactorDeskewSE3 : ceres::SizedCostFunction<1, 7, 3> {
  public:
   LidarPlaneFactorDeskewSE3(const Eigen::Vector3d &curr_point,
                             const Eigen::Vector3d &last_plane_C,

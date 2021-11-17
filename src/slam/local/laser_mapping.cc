@@ -30,6 +30,26 @@ inline typename pcl::PointCloud<T>::Ptr TransformPointCloud(const typename pcl::
   return cloud_out;
 }
 
+std::shared_ptr<IntegrationBase> GetPreintegration(const std::vector<ImuData> &imu_buf, const Time &time) {
+  auto it                      = std::lower_bound(imu_buf.begin(), imu_buf.end(), time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
+  double lidar_imu_time_offset = ToSeconds(it->time - time);
+  auto si                      = std::distance(imu_buf.begin(), it);
+  LOG_IF(ERROR, lidar_imu_time_offset >= 0.01)
+      << fmt::format(
+             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={}",
+             lidar_imu_time_offset,
+             imu_buf[si].time,
+             time);
+  auto imu_preintegration = std::make_shared<IntegrationBase>(imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
+  // add first phony imu data for time sync
+  imu_preintegration->push_back(ToSeconds(imu_buf[si].time - time), imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity);
+  for (size_t i = si; i < imu_buf.size() - 1; ++i) {
+    imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
+  }
+
+  return imu_preintegration;
+}
+
 }  // namespace
 
 // todo
@@ -151,7 +171,9 @@ void LaserMapping::Run() {
     //
     {
       absl::MutexLock lg(&mtx_imu_buf_);
-      UndistortScan(odom_result, imu_buf_, odom_result);
+      if (!estimator.IsInitialized()) {
+        UndistortScan(odom_result, imu_buf_, odom_result);
+      }
     }
 
     pose_odom_scan2world_ = odom_result.odom_pose;
@@ -167,6 +189,9 @@ void LaserMapping::Run() {
     TransformUpdate();
 
     if (kEnableMapSave) {
+      if (estimator.IsInitialized()) {
+        // todo kk add undistorted point cloud
+      }
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
     }
@@ -238,8 +263,17 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
     cloud_map.cloud_surf_less_flat    = laserCloudSurfFromMap;
     scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
     scan_curr.cloud_surf_less_flat    = laserCloudSurfLastStack;
-    std::shared_ptr<IntegrationBase> p(NULL);  // todo kk impl
-    scan_matcher_->MatchScan2Map(cloud_map, scan_curr, p, &pose_map_scan2world_);
+    std::shared_ptr<IntegrationBase> preintegration;
+    {
+      absl::MutexLock lg(&mtx_imu_buf_);
+      preintegration = GetPreintegration(imu_buf_, odom_result.time);
+    }
+    scan_matcher_->MatchScan2Map(cloud_map,
+                                 scan_curr,
+                                 estimator.IsInitialized(),
+                                 preintegration,
+                                 estimator.GetGravityVector(),
+                                 &pose_map_scan2world_);
   } else {
     LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
   }
@@ -324,21 +358,7 @@ void LaserMapping::UndistortScan(
     const LaserOdometryResultType &laser_odometry_result,
     const std::vector<ImuData> &imu_buf,
     LaserOdometryResultType &laser_odometry_result_deskewed) {
-  auto it                      = std::lower_bound(imu_buf.begin(), imu_buf.end(), laser_odometry_result.time, [](const ImuData &imu, const Time &t) { return imu.time < t; });
-  double lidar_imu_time_offset = ToSeconds(it->time - laser_odometry_result.time);
-  auto si                      = std::distance(imu_buf.begin(), it);
-  LOG_IF(ERROR, lidar_imu_time_offset >= 0.01)
-      << fmt::format(
-             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={}",
-             lidar_imu_time_offset,
-             imu_buf[si].time,
-             laser_odometry_result.time);
-  auto imu_preintegration = std::make_unique<IntegrationBase>(imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
-  // add first phony imu data for time sync
-  imu_preintegration->push_back(ToSeconds(imu_buf[si].time - laser_odometry_result.time), imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity);
-  for (size_t i = si; i < imu_buf.size() - 1; ++i) {
-    imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
-  }
+  auto imu_preintegration = GetPreintegration(imu_buf, laser_odometry_result.time);
   ScanUndistortionUtils::DoUndistort(laser_odometry_result, *imu_preintegration, laser_odometry_result_deskewed);
 }
 

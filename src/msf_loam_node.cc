@@ -152,6 +152,7 @@ void ComputeRelaTimeForEachPoint(const PointCloudOriginal &laser_cloud_in, std::
 
     double rela_time = relative_angle / (2 * M_PI) * kScanPeriod;
     point.time       = static_cast<float>(rela_time);
+    point.intensity  = point.time;  // todo kk here we assign time to intensity temporarily
     cloud_with_relative_time[point.ring].push_back(point);
   }
 }

@@ -42,6 +42,8 @@ class Estimator {
  public:
   bool IsInitialized() const { return is_initialized_; }
 
+  Vector3d GetGravityVector() const { return gravity_; }
+
  private:
   std::vector<ObservationRigid> obs_;
   Vector3d gravity_;
