@@ -40,7 +40,10 @@ class Estimator {
       const std::vector<ImuData> &imu_buf);
 
  public:
-  bool IsInitialized() const { return is_initialized_; }
+  bool IsInitialized() const {
+    return is_initialized_;
+    // return false;
+  }
 
   Vector3d GetGravityVector() const { return gravity_; }
 

@@ -13,11 +13,11 @@
 #include "common/common.h"
 #include "common/timestamped_pointcloud.h"
 #include "msg.pb.h"
+#include "slam/estimator/estimator.h"
 #include "slam/gps_fusion/gps_fusion.h"
-#include "slam/map/hybrid_grid.h"
 #include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/mapping_scan_matcher.h"
-#include "slam/estimator/estimator.h"
+#include "slam/map/hybrid_grid.h"
 
 class LaserMapping {
  public:
@@ -85,6 +85,8 @@ class LaserMapping {
   Rigid3d pose_map_scan2world_;
   // Transformation between odom's world and map's world frame
   Rigid3d pose_odom2map_;
+
+  Vector3d velocity_;
 
   /**
    * @brief ROS

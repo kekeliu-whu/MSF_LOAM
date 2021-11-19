@@ -188,10 +188,28 @@ void LaserMapping::Run() {
     MatchScan2Map(odom_result);
     TransformUpdate();
 
+    std::shared_ptr<IntegrationBase> preintegration;
+    {
+      absl::MutexLock lg(&mtx_imu_buf_);
+      preintegration = GetPreintegration(imu_buf_, odom_result.time);
+    }
+    if (estimator.IsInitialized()) {
+      auto DoUndistort = [&](PointCloudOriginalPtr &cloud) {
+        for (auto &e : *cloud) {
+          auto dt            = e.intensity;
+          auto delta_qp      = GetDeltaQP(preintegration, e.intensity);
+          e.getVector3fMap() = (std::get<0>(delta_qp) * e.getVector3fMap().cast<double>() + this->pose_odom_scan2world_.rotation().conjugate() * (velocity_ * dt - 0.5 * estimator.GetGravityVector() * dt * dt) + std::get<1>(delta_qp))
+                                   .cast<float>();
+        }
+      };
+      DoUndistort(odom_result.cloud_full_res);
+      DoUndistort(odom_result.cloud_corner_sharp);
+      DoUndistort(odom_result.cloud_corner_less_sharp);
+      DoUndistort(odom_result.cloud_surf_flat);
+      DoUndistort(odom_result.cloud_surf_less_flat);
+    }
+
     if (kEnableMapSave) {
-      if (estimator.IsInitialized()) {
-        // todo kk add undistorted point cloud
-      }
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
     }
@@ -273,7 +291,8 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
                                  estimator.IsInitialized(),
                                  preintegration,
                                  estimator.GetGravityVector(),
-                                 &pose_map_scan2world_);
+                                 &pose_map_scan2world_,
+                                 &velocity_);
   } else {
     LOG(WARNING) << "[MAP] time Map corner and surf num are not enough";
   }

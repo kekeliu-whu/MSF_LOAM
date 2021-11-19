@@ -13,22 +13,6 @@ namespace {
 
 constexpr int kOptimalNum = 2;
 
-std::tuple<Quaterniond, Vector3d> GetDeltaQP(const std::shared_ptr<IntegrationBase> &preintegration, double dt) {
-  CHECK_GE(dt, 0);
-  auto sum_dt_buf = preintegration->sum_dt_buf_;
-  auto it         = std::upper_bound(sum_dt_buf.begin(), sum_dt_buf.end(), dt);
-  std::size_t idx = (it == sum_dt_buf.end())
-                        ? sum_dt_buf.size() - 2
-                        : std::distance(sum_dt_buf.begin(), it) - 1;
-  CHECK_GE(idx, 0);
-
-  double s = (dt - sum_dt_buf[idx]) / (sum_dt_buf[idx + 1] - sum_dt_buf[idx]);
-
-  auto q = preintegration->delta_q_buf_[idx].slerp(s, preintegration->delta_q_buf_[idx + 1]);
-  auto p = (1 - s) * preintegration->delta_p_buf_[idx] + s * preintegration->delta_p_buf_[idx + 1];
-  return {q, p};
-}
-
 }  // namespace
 
 bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &cloud_map,
@@ -36,7 +20,8 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                                        const bool is_initialized,
                                        const std::shared_ptr<IntegrationBase> &preintegration,
                                        const Vector3d &gravity_vector,
-                                       Rigid3d *pose_estimate_map_scan2world) {
+                                       Rigid3d *pose_estimate_map_scan2world,
+                                       Vector3d *velocity) {
   TicToc t_opt;
   TicToc t_tree;
 
@@ -68,9 +53,23 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
     PointType pointOri, pointSel;
 
+    auto &Vi = *velocity;
     for (size_t i = 0; i < scan_curr.cloud_corner_less_sharp->size(); i++) {
       pointOri = scan_curr.cloud_corner_less_sharp->points[i];
-      pointSel = *pose_estimate_map_scan2world * pointOri;
+
+      Quaterniond delta_q;
+      Vector3d delta_p;
+      auto dt                    = pointOri.intensity;
+      std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
+
+      if (is_initialized) {
+        pointSel = *pose_estimate_map_scan2world * (Rigid3d{
+                                                        pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p,
+                                                        delta_q} *
+                                                    pointOri);
+      } else {
+        pointSel = *pose_estimate_map_scan2world * pointOri;
+      }
       kdtreeCornerFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                           pointSearchSqDis);
 
@@ -99,10 +98,6 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
           point_a = 0.1 * unit_direction + point_on_line;
           point_b = -0.1 * unit_direction + point_on_line;
 
-          Quaterniond delta_q;
-          Vector3d delta_p;
-          auto dt                    = pointOri.intensity;
-          std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
           ceres::CostFunction *cost_function;
           if (is_initialized) {
             cost_function = new LidarEdgeFactorDeskewSE3(
@@ -113,12 +108,16 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                 delta_q,
                 dt,
                 gravity_vector);
+            problem.AddResidualBlock(
+                cost_function, loss_function,
+                pose_params.data(),
+                Vi.data());
           } else {
             cost_function = new LidarEdgeFactorSE3(curr_point, point_a, (point_a - point_b).normalized());
+            problem.AddResidualBlock(
+                cost_function, loss_function,
+                pose_params.data());
           }
-          problem.AddResidualBlock(
-              cost_function, loss_function,
-              pose_params.data());
           corner_num++;
         }
       }
@@ -127,7 +126,20 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     int surf_num = 0;
     for (size_t i = 0; i < scan_curr.cloud_surf_less_flat->size(); i++) {
       pointOri = scan_curr.cloud_surf_less_flat->points[i];
-      pointSel = *pose_estimate_map_scan2world * pointOri;
+
+      Quaterniond delta_q;
+      Vector3d delta_p;
+      auto dt                    = pointOri.intensity;
+      std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
+
+      if (is_initialized) {
+        pointSel = *pose_estimate_map_scan2world * (Rigid3d{
+                                                        pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p,
+                                                        delta_q} *
+                                                    pointOri);
+      } else {
+        pointSel = *pose_estimate_map_scan2world * pointOri;
+      }
       kdtreeSurfFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                         pointSearchSqDis);
 
@@ -156,10 +168,6 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
         }
         Eigen::Vector3d curr_point(pointOri.x, pointOri.y, pointOri.z);
         if (planeValid) {
-          Quaterniond delta_q;
-          Vector3d delta_p;
-          auto dt                    = pointOri.intensity;
-          std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
           ceres::CostFunction *cost_function;
           if (is_initialized) {
             cost_function = new LidarPlaneFactorDeskewSE3(
@@ -170,12 +178,16 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                 delta_q,
                 dt,
                 gravity_vector);
+            problem.AddResidualBlock(
+                cost_function, loss_function,
+                pose_params.data(),
+                Vi.data());
           } else {
             cost_function = new LidarPlaneFactorSE3(curr_point, center, norm);
+            problem.AddResidualBlock(
+                cost_function, loss_function,
+                pose_params.data());
           }
-          problem.AddResidualBlock(
-              cost_function, loss_function,
-              pose_params.data());
           surf_num++;
         }
       }

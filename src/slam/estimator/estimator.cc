@@ -148,6 +148,6 @@ void Estimator::AddData(
     ceres::Solve(options, &problem, &summary);
 
     LOG(WARNING) << "Gravity and velocity init done, G=" << gravity_.transpose() << "\n, report=\n"
-                 << summary.FullReport();
+                 << summary.BriefReport();
   }
 }
