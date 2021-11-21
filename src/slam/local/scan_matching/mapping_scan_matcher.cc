@@ -7,6 +7,7 @@
 #include "common/tic_toc.h"
 #include "lidar_factor.h"
 #include "mapping_scan_matcher.h"
+#include "slam/imu_fusion/imu_factor.h"
 #include "slam/imu_fusion/pose_local_parameterization.h"
 
 namespace {
@@ -204,6 +205,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
       this->RefineByRejectOutliersWithThreshold(problem, 1);
     }
     ceres::Solve(options, &problem, &summary);
+    if (iterCount == kOptimalNum - 1) {
+      LOG(WARNING) << scan_curr.time << " " << Vi.transpose();
+    }
+    LOG(WARNING) << summary.BriefReport();
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
 
     // attention: update by optimized pose_params(vector7)

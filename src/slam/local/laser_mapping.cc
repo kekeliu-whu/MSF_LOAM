@@ -279,6 +279,7 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
     TimestampedPointCloud<PointType> cloud_map, scan_curr;
     cloud_map.cloud_corner_less_sharp = laserCloudCornerFromMap;
     cloud_map.cloud_surf_less_flat    = laserCloudSurfFromMap;
+    scan_curr.time                    = odom_result.time;
     scan_curr.cloud_corner_less_sharp = laserCloudCornerLastStack;
     scan_curr.cloud_surf_less_flat    = laserCloudSurfLastStack;
     std::shared_ptr<IntegrationBase> preintegration;
