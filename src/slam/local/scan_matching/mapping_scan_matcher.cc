@@ -21,8 +21,43 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                                        const bool is_initialized,
                                        const std::shared_ptr<IntegrationBase> &preintegration,
                                        const Vector3d &gravity_vector,
+                                       const RobotState &prev_state,
                                        Rigid3d *pose_estimate_map_scan2world,
                                        Vector3d *velocity) {
+  Eigen::Matrix<double, 7, 1> pose_i = Rigid3d{prev_state.p, prev_state.q}.ToVector7();
+  Eigen::Matrix<double, 9, 1> bias_i = Eigen::Matrix<double, 9, 1>::Zero();
+  bias_i.head<3>()                   = prev_state.v;
+  // todo init pose_j
+  Eigen::Matrix<double, 7, 1> pose_j = pose_i;
+  Eigen::Matrix<double, 9, 1> bias_j = bias_i;
+
+  if (is_initialized) {
+    // todo kk
+    ceres::Problem problem;
+
+    problem.AddResidualBlock(new IMUFactor(prev_state.imu_preintegration), nullptr,
+                             pose_i.data(), bias_i.data(), pose_j.data(), bias_j.data());
+
+    problem.SetParameterBlockConstant(pose_i.data());
+    problem.SetParameterBlockConstant(bias_i.data());
+    problem.AddParameterBlock(pose_j.data(), 7, new PoseLocalParameterization);
+    problem.AddParameterBlock(bias_j.data(), 9, new ceres::SubsetParameterization(9, {3, 4, 5, 6, 7, 8}));
+
+    ceres::Solver::Options options;
+    options.max_num_iterations           = 6;
+    options.minimizer_progress_to_stdout = false;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+    LOG(WARNING) << summary.BriefReport();
+    LOG(WARNING) << pose_i.transpose();
+    LOG(WARNING) << bias_i.transpose();
+    LOG(WARNING) << pose_j.transpose();
+    LOG(WARNING) << bias_j.transpose();
+
+    *pose_estimate_map_scan2world = pose_j;
+    *velocity                     = bias_j.head<3>();
+  }
+
   TicToc t_opt;
   TicToc t_tree;
 
@@ -44,7 +79,9 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
     ceres::Problem problem(problem_options);
     auto pose_params = pose_estimate_map_scan2world->ToVector7();
-    problem.AddParameterBlock(pose_params.data(), 7, se3_parameterization);
+    if (!is_initialized) {
+      problem.AddParameterBlock(pose_params.data(), 7, se3_parameterization);
+    }
 
     TicToc t_data;
     int corner_num = 0;
@@ -54,7 +91,8 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
     PointType pointOri, pointSel;
 
-    auto &Vi = *velocity;
+    Vector3d Vi = bias_j.head<3>();
+    LOG(WARNING) << pose_estimate_map_scan2world->ToVector7().transpose();
     for (size_t i = 0; i < scan_curr.cloud_corner_less_sharp->size(); i++) {
       pointOri = scan_curr.cloud_corner_less_sharp->points[i];
 
@@ -111,8 +149,8 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                 gravity_vector);
             problem.AddResidualBlock(
                 cost_function, loss_function,
-                pose_params.data(),
-                Vi.data());
+                pose_j.data(),
+                bias_j.data());
           } else {
             cost_function = new LidarEdgeFactorSE3(curr_point, point_a, (point_a - point_b).normalized());
             problem.AddResidualBlock(
@@ -181,8 +219,8 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                 gravity_vector);
             problem.AddResidualBlock(
                 cost_function, loss_function,
-                pose_params.data(),
-                Vi.data());
+                pose_j.data(),
+                bias_j.data());
           } else {
             cost_function = new LidarPlaneFactorSE3(curr_point, center, norm);
             problem.AddResidualBlock(
@@ -204,6 +242,18 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     if (iterCount == kOptimalNum - 1) {
       this->RefineByRejectOutliersWithThreshold(problem, 1);
     }
+
+    if (is_initialized) {
+      // add imu factor
+      problem.AddResidualBlock(new IMUFactor(prev_state.imu_preintegration), nullptr,
+                               pose_i.data(), bias_i.data(), pose_j.data(), bias_j.data());
+
+      problem.SetParameterBlockConstant(pose_i.data());
+      problem.SetParameterBlockConstant(bias_i.data());
+      problem.AddParameterBlock(pose_j.data(), 7, new PoseLocalParameterization);
+      problem.AddParameterBlock(bias_j.data(), 9, new ceres::SubsetParameterization(9, {3, 4, 5, 6, 7, 8}));
+    }
+
     ceres::Solve(options, &problem, &summary);
     if (iterCount == kOptimalNum - 1) {
       LOG(WARNING) << scan_curr.time << " " << Vi.transpose();
@@ -212,8 +262,13 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
 
     // attention: update by optimized pose_params(vector7)
-    *pose_estimate_map_scan2world = pose_params;
+    if (!is_initialized) {
+      *pose_estimate_map_scan2world = pose_params;
+    } else {
+      *pose_estimate_map_scan2world = pose_j;
+    }
   }
+  LOG(WARNING) << pose_estimate_map_scan2world->ToVector7().transpose();
   LOG_STEP_TIME("MAP", "Optimization twice", t_opt.toc());
 
   return true;

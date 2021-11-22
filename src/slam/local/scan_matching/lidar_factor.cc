@@ -62,8 +62,9 @@ bool LidarEdgeFactorDeskewSE3::Evaluate(double const *const *parameters, double 
     }
 
     if (jacobians[1]) {
-      Eigen::Map<Eigen::Matrix<double, kResidualNums, 3, Eigen::RowMajor>> jacobian_bias_i(jacobians[1]);
-      jacobian_bias_i = Utility::skewSymmetric(last_line_N_) * dt_;
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 9, Eigen::RowMajor>> jacobian_bias_i(jacobians[1]);
+      jacobian_bias_i.setZero();
+      jacobian_bias_i.block<kResidualNums, 3>(0, 0) = Utility::skewSymmetric(last_line_N_) * dt_;
     }
   }
 
@@ -89,8 +90,9 @@ bool LidarPlaneFactorDeskewSE3::Evaluate(double const *const *parameters, double
     }
 
     if (jacobians[1]) {
-      Eigen::Map<Eigen::Matrix<double, kResidualNums, 3, Eigen::RowMajor>> jacobian_bias_i(jacobians[1]);
-      jacobian_bias_i = last_plane_N_.transpose() * dt_;
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 9, Eigen::RowMajor>> jacobian_bias_i(jacobians[1]);
+      jacobian_bias_i.setZero();
+      jacobian_bias_i.block<kResidualNums, 3>(0, 0) = last_plane_N_.transpose() * dt_;
     }
   }
 

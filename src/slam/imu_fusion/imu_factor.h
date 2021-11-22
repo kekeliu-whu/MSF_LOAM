@@ -12,12 +12,12 @@ class IMUFactor : public ceres::SizedCostFunction<15, 7, 9, 7, 9> {
  public:
   IMUFactor() = delete;
 
-  IMUFactor(IntegrationBase *pre_integration)
+  IMUFactor(const std::shared_ptr<IntegrationBase> &pre_integration)
       : pre_integration_(pre_integration) {
   }
 
   virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
 
  private:
-  IntegrationBase *pre_integration_;
+  std::shared_ptr<IntegrationBase> pre_integration_;
 };

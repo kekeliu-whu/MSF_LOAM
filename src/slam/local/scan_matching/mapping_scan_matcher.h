@@ -5,8 +5,8 @@
 #ifndef MSF_LOAM_VELODYNE_MAPPING_SCAN_MATCHER_H
 #define MSF_LOAM_VELODYNE_MAPPING_SCAN_MATCHER_H
 
-#include <cstdlib>
 #include "scan_matcher.h"
+#include "slam/estimator/estimator.h"
 
 class MappingScanMatcher : public ScanMatcher {
  public:
@@ -15,6 +15,7 @@ class MappingScanMatcher : public ScanMatcher {
                      const bool is_initialized,
                      const std::shared_ptr<IntegrationBase> &preintegration,
                      const Vector3d &gravity_vector,
+                     const RobotState &prev_state,
                      Rigid3d *pose_estimate_map_scan2world,
                      Vector3d *velocity);
 };

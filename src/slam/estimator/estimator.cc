@@ -1,3 +1,8 @@
+#include <ceres/ceres.h>
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
+#include "common/common.h"
 #include "slam/estimator/estimator.h"
 
 namespace {
@@ -51,7 +56,8 @@ struct VelocityGravityInitFactor {
 void Estimator::AddData(
     const LaserOdometryResultType &prev_odom,
     const Time &curr_odom_time,
-    const std::vector<ImuData> &imu_buf) {
+    const std::vector<ImuData> &imu_buf,
+    const Vector3d &velocity) {
   // first imu which timestamp GE than cur_odom.time
   // first imu data where t >= prev_odom.time
   auto it_start = std::upper_bound(imu_buf.begin(), imu_buf.end(), prev_odom.time, [](const Time &t, const ImuData &imu) { return t < imu.time; });
@@ -68,23 +74,24 @@ void Estimator::AddData(
              prev_odom.time);
 
   auto imu_preintegration = std::make_shared<IntegrationBase>(imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
-  // add first fake imu measurement for lidar-imu sync
+  // add first phony imu measurement for lidar-imu sync
   imu_preintegration->push_back(ToSeconds(imu_buf[si].time - prev_odom.time), imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity);
   for (size_t i = si; i < ei - 1; ++i) {
     imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
   }
-  // add last fake imu measurement for lidar-imu sync
+  // add last phony imu measurement for lidar-imu sync
   imu_preintegration->push_back(ToSeconds(curr_odom_time - imu_buf[ei - 1].time), imu_buf[ei - 1].linear_acceleration, imu_buf[ei - 1].angular_velocity);
 
   if (!obs_.empty()) {
     CHECK_DOUBLE_EQ(ToSeconds(prev_odom.time - obs_.back().time), obs_.back().imu_preintegration->sum_dt_);
   }
-  auto ob               = ObservationRigid{};
-  ob.time               = prev_odom.time;
-  ob.pose               = prev_odom.map_pose;
-  ob.imu_preintegration = std::move(imu_preintegration);
-  ob.velocity.setZero();
-  obs_.push_back(ob);
+  auto rs               = RobotState{};
+  rs.time               = prev_odom.time;
+  rs.p                  = prev_odom.map_pose.translation();
+  rs.v                  = velocity;
+  rs.q                  = prev_odom.map_pose.rotation();
+  rs.imu_preintegration = std::move(imu_preintegration);
+  obs_.push_back(rs);
 
   // todo do not use magic number here
   if (obs_.size() == kInitByFirstScanNums) {
@@ -93,15 +100,15 @@ void Estimator::AddData(
     for (int i = 0; i < obs_.size() - 1; ++i) {
       problem.AddResidualBlock(
           VelocityGravityInitFactor::Create(
-              obs_[i].pose,
-              obs_[i + 1].pose,
+              {obs_[i].p, obs_[i].q},
+              {obs_[i + 1].p, obs_[i + 1].q},
               ToSeconds(obs_[i + 1].time - obs_[i].time),
               obs_[i].imu_preintegration->delta_p_,
               obs_[i].imu_preintegration->delta_v_),
           nullptr,
           gravity_.data(),
-          obs_[i].velocity.data(),
-          obs_[i + 1].velocity.data());
+          obs_[i].v.data(),
+          obs_[i + 1].v.data());
     }
     ceres::Solver::Options options;
     options.minimizer_progress_to_stdout = true;
@@ -118,36 +125,5 @@ void Estimator::AddData(
 
     // todo kk init failed condition?
     this->is_initialized_ = true;
-  }
-
-  if (obs_.size() > kInitByFirstScanNums) {
-    ceres::Problem problem;
-    // todo kk
-    for (size_t i = obs_.size() - 50; i < obs_.size() - 1; ++i) {
-      problem.AddResidualBlock(
-          VelocityGravityInitFactor::Create(
-              obs_[i].pose,
-              obs_[i + 1].pose,
-              ToSeconds(obs_[i + 1].time - obs_[i].time),
-              obs_[i].imu_preintegration->delta_p_,
-              obs_[i].imu_preintegration->delta_v_),
-          nullptr,
-          gravity_.data(),
-          obs_[i].velocity.data(),
-          obs_[i + 1].velocity.data());
-    }
-    problem.SetParameterBlockConstant(gravity_.data());
-    ceres::Solver::Options options;
-    options.minimizer_progress_to_stdout = false;
-    ceres::Solver::Summary summary;
-
-    // first optimal
-    ceres::Solve(options, &problem, &summary);
-    // second optimal after rejecting outliers
-    ScanMatcher::RefineByRejectOutliersWithFrac(problem, 6, 0.15);
-    ceres::Solve(options, &problem, &summary);
-
-    LOG(WARNING) << "Gravity and velocity init done, G=" << gravity_.transpose() << "\n, report=\n"
-                 << summary.BriefReport();
   }
 }

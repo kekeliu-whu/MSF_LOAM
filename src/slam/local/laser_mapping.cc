@@ -236,7 +236,10 @@ void LaserMapping::Run() {
     {
       absl::MutexLock lg(&mtx_imu_buf_);
       if (prev_odometry_result_.is_initialized()) {
-        estimator.AddData(prev_odometry_result_.get(), odom_result.time, imu_buf_);
+        estimator.AddData(prev_odometry_result_.get(), odom_result.time, imu_buf_,velocity_);
+        if (estimator.IsInitialized()) {
+          G = estimator.GetGravityVector();
+        }
       }
     }
     prev_odometry_result_ = odom_result;
@@ -292,6 +295,7 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
                                  estimator.IsInitialized(),
                                  preintegration,
                                  estimator.GetGravityVector(),
+                                 estimator.GetPrevState(),
                                  &pose_map_scan2world_,
                                  &velocity_);
   } else {

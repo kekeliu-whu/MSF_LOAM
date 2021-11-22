@@ -1,12 +1,5 @@
 #pragma once
 
-#include <ceres/ceres.h>
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-
-#include "common/common.h"
-#include "common/rigid_transform.h"
-#include "common/time.h"
 #include "common/timestamped_pointcloud.h"
 #include "slam/imu_fusion/integration_base.h"
 #include "slam/imu_fusion/types.h"
@@ -14,11 +7,14 @@
 
 using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
 
-struct ObservationRigid {
+struct RobotState {
   Time time;
 
-  Rigid3d pose;
-  Vector3d velocity;
+  Vector3d p;
+  Vector3d v;
+  Quaterniond q;
+  Vector3d bg;
+  Vector3d ba;
   std::shared_ptr<IntegrationBase> imu_preintegration;
 };
 
@@ -32,12 +28,12 @@ class Estimator {
 
   // Add lidar odometry result and next lidar time
   // 1. Collect imu preintegration measurements and add push it to obs_;
-  // 2. Init velocity-gravity when obs_.size()<kInitByFirstScanNums;
-  // 3. Update velocity when obs_.size()>=kInitByFirstScanNums.
+  // 2. Init velocity-gravity when obs_.size()<kInitByFirstScanNums.
   void AddData(
       const LaserOdometryResultType &prev_odom,
       const Time &curr_odom_time,
-      const std::vector<ImuData> &imu_buf);
+      const std::vector<ImuData> &imu_buf,
+      const Vector3d &velocity);
 
  public:
   bool IsInitialized() const {
@@ -47,8 +43,14 @@ class Estimator {
 
   Vector3d GetGravityVector() const { return gravity_; }
 
+  RobotState GetPrevState() const {
+    // CHECK_GT(obs_.size(), 0);
+    // todo kk
+    return obs_.size() > 0 ? obs_.back() : RobotState{};
+  }
+
  private:
-  std::vector<ObservationRigid> obs_;
+  std::vector<RobotState> obs_;
   Vector3d gravity_;
   bool is_initialized_;
 
