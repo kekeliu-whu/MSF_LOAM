@@ -56,21 +56,20 @@ struct VelocityGravityInitFactor {
 }  // namespace
 
 void Estimator::AddData(
-    const LaserOdometryResultType &prev_odom,
-    const Time &curr_odom_time,
-    const std::vector<ImuData> &imu_buf,
-    const Vector3d &velocity) {
-  auto imu_preintegration = BuildPreintegration(imu_buf, prev_odom.time, curr_odom_time);
-
-  if (!obs_.empty()) {
-    CHECK_DOUBLE_EQ(ToSeconds(prev_odom.time - obs_.back().time), obs_.back().imu_preintegration->sum_dt_);
+    const LaserOdometryResultType &curr_odom,
+    const Vector3d &velocity,
+    const std::vector<ImuData> &imu_buf) {
+  auto rs = RobotState{};
+  rs.time = curr_odom.time;
+  rs.p    = curr_odom.map_pose.translation();
+  rs.v    = velocity;
+  rs.q    = curr_odom.map_pose.rotation();
+  if (obs_.empty()) {
+    obs_.push_back(rs);
+    return;
   }
-  auto rs               = RobotState{};
-  rs.time               = prev_odom.time;
-  rs.p                  = prev_odom.map_pose.translation();
-  rs.v                  = velocity;
-  rs.q                  = prev_odom.map_pose.rotation();
-  rs.imu_preintegration = std::move(imu_preintegration);
+
+  obs_.back().imu_preintegration = BuildPreintegration(imu_buf, obs_.back().time, curr_odom.time);
   obs_.push_back(rs);
 
   // todo do not use magic number here

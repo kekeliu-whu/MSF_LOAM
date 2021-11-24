@@ -36,9 +36,8 @@ class Estimator {
   // 2. Init velocity-gravity when obs_.size()<kInitByFirstScanNums.
   void AddData(
       const LaserOdometryResultType &prev_odom,
-      const Time &curr_odom_time,
-      const std::vector<ImuData> &imu_buf,
-      const Vector3d &velocity);
+      const Vector3d &velocity,
+      const std::vector<ImuData> &imu_buf);
 
  public:
   bool IsInitialized() const {

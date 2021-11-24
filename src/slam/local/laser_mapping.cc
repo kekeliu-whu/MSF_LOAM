@@ -177,7 +177,7 @@ void LaserMapping::Run() {
       auto DoUndistort = [&](PointCloudOriginalPtr &cloud) {
         for (auto &e : *cloud) {
           auto dt            = e.intensity;
-          auto delta_qp      = GetDeltaQP(preintegration, e.intensity);
+          auto delta_qp      = GetDeltaQP(preintegration, dt);
           e.getVector3fMap() = (std::get<0>(delta_qp) * e.getVector3fMap().cast<double>() + this->pose_odom_scan2world_.rotation().conjugate() * (velocity_ * dt - 0.5 * estimator.GetGravityVector() * dt * dt) + std::get<1>(delta_qp))
                                    .cast<float>();
         }
@@ -215,14 +215,11 @@ void LaserMapping::Run() {
     // todo init bias and gravity vector by set device still
     {
       absl::MutexLock lg(&mtx_imu_buf_);
-      if (prev_odometry_result_.is_initialized()) {
-        estimator.AddData(prev_odometry_result_.get(), odom_result.time, imu_buf_,velocity_);
-        if (estimator.IsInitialized()) {
-          G = estimator.GetGravityVector();
-        }
+      estimator.AddData(odom_result, velocity_, imu_buf_);
+      if (estimator.IsInitialized()) {
+        G = estimator.GetGravityVector();
       }
     }
-    prev_odometry_result_ = odom_result;
 
     auto odom_msg = pb_data_.add_odom_datas();
     odom_msg->set_timestamp(ToUniversal(odom_result.time));
@@ -270,12 +267,18 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
       absl::MutexLock lg(&mtx_imu_buf_);
       preintegration = BuildPreintegration(imu_buf_, odom_result.time);
     }
+    auto prev_state = estimator.GetPrevState();
+    {
+      // todo kk
+      absl::MutexLock lg{&mtx_imu_buf_};
+      prev_state.imu_preintegration = BuildPreintegration(imu_buf_, prev_state.time, odom_result.time);
+    }
     scan_matcher_->MatchScan2Map(cloud_map,
                                  scan_curr,
                                  estimator.IsInitialized(),
                                  preintegration,
                                  estimator.GetGravityVector(),
-                                 estimator.GetPrevState(),
+                                 prev_state,
                                  &pose_map_scan2world_,
                                  &velocity_);
   } else {

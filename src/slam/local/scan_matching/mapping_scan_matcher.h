@@ -21,6 +21,7 @@ class MappingScanMatcher : public ScanMatcher {
 };
 
 inline std::tuple<Quaterniond, Vector3d> GetDeltaQP(const std::shared_ptr<IntegrationBase> &preintegration, double dt) {
+  // CHECK_NE(preintegration.get(), nullptr);
   CHECK_GE(dt, 0);
   auto sum_dt_buf = preintegration->sum_dt_buf_;
   auto it         = std::upper_bound(sum_dt_buf.begin(), sum_dt_buf.end(), dt);
