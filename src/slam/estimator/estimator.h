@@ -18,6 +18,11 @@ struct RobotState {
   std::shared_ptr<IntegrationBase> imu_preintegration;
 };
 
+std::shared_ptr<IntegrationBase> BuildPreintegration(
+    const std::vector<ImuData> &imu_buf,
+    const Time &start_time,
+    const Time &end_time = Time::max());
+
 class Estimator {
  public:
   // todo kk do not use magic number here

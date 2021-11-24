@@ -1,6 +1,8 @@
 #include <ceres/ceres.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include <algorithm>
+#include <cstddef>
 
 #include "common/common.h"
 #include "slam/estimator/estimator.h"
@@ -58,29 +60,7 @@ void Estimator::AddData(
     const Time &curr_odom_time,
     const std::vector<ImuData> &imu_buf,
     const Vector3d &velocity) {
-  // first imu which timestamp GE than cur_odom.time
-  // first imu data where t >= prev_odom.time
-  auto it_start = std::upper_bound(imu_buf.begin(), imu_buf.end(), prev_odom.time, [](const Time &t, const ImuData &imu) { return t < imu.time; });
-  // first imu data where t >= cur_odom.time
-  auto it_end                  = std::upper_bound(imu_buf.begin(), imu_buf.end(), curr_odom_time, [](const Time &t, const ImuData &imu) { return t < imu.time; });
-  double lidar_imu_time_offset = ToSeconds(it_start->time - prev_odom.time);
-  auto si                      = std::distance(imu_buf.begin(), it_start);
-  auto ei                      = std::distance(imu_buf.begin(), it_end);
-  LOG_IF(ERROR, lidar_imu_time_offset >= 0.01)
-      << fmt::format(
-             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={}",
-             lidar_imu_time_offset,
-             imu_buf[si].time,
-             prev_odom.time);
-
-  auto imu_preintegration = std::make_shared<IntegrationBase>(imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
-  // add first phony imu measurement for lidar-imu sync
-  imu_preintegration->push_back(ToSeconds(imu_buf[si].time - prev_odom.time), imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity);
-  for (size_t i = si; i < ei - 1; ++i) {
-    imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
-  }
-  // add last phony imu measurement for lidar-imu sync
-  imu_preintegration->push_back(ToSeconds(curr_odom_time - imu_buf[ei - 1].time), imu_buf[ei - 1].linear_acceleration, imu_buf[ei - 1].angular_velocity);
+  auto imu_preintegration = BuildPreintegration(imu_buf, prev_odom.time, curr_odom_time);
 
   if (!obs_.empty()) {
     CHECK_DOUBLE_EQ(ToSeconds(prev_odom.time - obs_.back().time), obs_.back().imu_preintegration->sum_dt_);
@@ -126,4 +106,37 @@ void Estimator::AddData(
     // todo kk init failed condition?
     this->is_initialized_ = true;
   }
+}
+
+std::shared_ptr<IntegrationBase> BuildPreintegration(
+    const std::vector<ImuData> &imu_buf,
+    const Time &start_time,
+    const Time &end_time) {
+  // first imu data where t >= start_time
+  auto it_start = std::lower_bound(imu_buf.begin(), imu_buf.end(), start_time, [](const ImuData &imu, const Time &time) { return imu.time < time; });
+  // first imu data where t >= end_time
+  auto it_end                  = std::lower_bound(imu_buf.begin(), imu_buf.end(), end_time, [](const ImuData &imu, const Time &time) { return imu.time < time; });
+  double lidar_imu_time_offset = ToSeconds(it_start->time - start_time);
+  // here start_time <= imu_buf[si].time ... imu_buf[ei].time < end_time
+  size_t si = std::distance(imu_buf.begin(), it_start);
+  size_t ei = std::distance(imu_buf.begin(), it_end) - 1;  // this apply to 'end_time == Time::max()' also
+  LOG_IF(ERROR, lidar_imu_time_offset >= 0.01)
+      << fmt::format(
+             "imu preintegration failed: lidar_imu_time_offset={} @ imu={} lidar={}",
+             lidar_imu_time_offset,
+             imu_buf[si].time,
+             start_time);
+
+  // add first phony imu measurement for lidar-imu sync
+  auto imu_preintegration = std::make_shared<IntegrationBase>(imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity, Vector3d::Zero(), Vector3d::Zero());
+  imu_preintegration->push_back(ToSeconds(imu_buf[si].time - start_time), imu_buf[si].linear_acceleration, imu_buf[si].angular_velocity);
+  for (size_t i = si; i < ei - 1; ++i) {
+    imu_preintegration->push_back(ToSeconds(imu_buf[i + 1].time - imu_buf[i].time), imu_buf[i + 1].linear_acceleration, imu_buf[i + 1].angular_velocity);
+  }
+  if (end_time != Time::max()) {
+    // add last phony imu measurement for lidar-imu sync
+    imu_preintegration->push_back(ToSeconds(end_time - imu_buf[ei - 1].time), imu_buf[ei - 1].linear_acceleration, imu_buf[ei - 1].angular_velocity);
+  }
+
+  return imu_preintegration;
 }
