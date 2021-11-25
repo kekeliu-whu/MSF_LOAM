@@ -41,8 +41,8 @@ class Estimator {
 
  public:
   bool IsInitialized() const {
-    return is_initialized_;
     // return false;
+    return is_initialized_;
   }
 
   Vector3d GetGravityVector() const { return gravity_; }

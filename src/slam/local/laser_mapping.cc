@@ -45,7 +45,8 @@ LaserMapping::LaserMapping(bool is_offline_mode)
       hybrid_grid_map_surf_(3.0),
       is_offline_mode_(is_offline_mode),
       is_firstframe_(true),
-      should_exit_(false) {
+      should_exit_(false),
+      velocity_(Vector3d::Zero()) {
   // NodeHandle uses reference counting internally,
   // thus a local variable can be created here
   ros::NodeHandle nh;
@@ -201,7 +202,7 @@ void LaserMapping::Run() {
       DoUndistort(odom_result.cloud_surf_less_flat);
     }
 
-    if (kEnableMapSave) {
+    if (kEnableMapSave && estimator.IsInitialized()) {
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
     }
@@ -228,8 +229,13 @@ void LaserMapping::Run() {
     {
       absl::MutexLock lg(&mtx_imu_buf_);
       estimator.AddData(odom_result, velocity_, imu_buf_);
-      if (estimator.IsInitialized()) {
-        G = estimator.GetGravityVector();
+      static bool is_first_init = true;
+      if (estimator.IsInitialized() && is_first_init) {
+        is_first_init = false;
+        G             = estimator.GetGravityVector();
+        // todo do not use cloud in init procedure
+        // this->hybrid_grid_map_surf_   = HybridGrid(3.0);
+        // this->hybrid_grid_map_corner_ = HybridGrid(3.0);
       }
     }
 
@@ -284,6 +290,7 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
       // todo kk
       absl::MutexLock lg{&mtx_imu_buf_};
       prev_state.imu_preintegration = BuildPreintegration(imu_buf_, prev_state.time, odom_result.time);
+      velocity_                     = prev_state.v;
     }
     scan_matcher_->MatchScan2Map(cloud_map,
                                  scan_curr,

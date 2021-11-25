@@ -24,6 +24,7 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
                                        const RobotState &prev_state,
                                        Rigid3d *pose_estimate_map_scan2world,
                                        Vector3d *velocity) {
+  LOG(WARNING) << "prev_state: time= " << prev_state.time << " ,pose= " << prev_state.p.transpose() << " " << prev_state.q.coeffs().transpose() << " ,v= " << velocity->transpose();
   Eigen::Matrix<double, 7, 1> pose_i = Rigid3d{prev_state.p, prev_state.q}.ToVector7();
   Eigen::Matrix<double, 9, 1> bias_i = Eigen::Matrix<double, 9, 1>::Zero();
   bias_i.head<3>()                   = prev_state.v;
@@ -92,7 +93,7 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     PointType pointOri, pointSel;
 
     Vector3d Vi = bias_j.head<3>();
-    LOG(WARNING) << pose_estimate_map_scan2world->ToVector7().transpose();
+    LOG(WARNING) << "time= " << scan_curr.time << " ,pose= " << pose_estimate_map_scan2world->ToVector7().transpose() << " ,v= " << bias_j.head<3>().transpose();
     for (size_t i = 0; i < scan_curr.cloud_corner_less_sharp->size(); i++) {
       pointOri = scan_curr.cloud_corner_less_sharp->points[i];
 
@@ -245,13 +246,15 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
     if (is_initialized) {
       // add imu factor
-      problem.AddResidualBlock(new IMUFactor(prev_state.imu_preintegration), nullptr,
-                               pose_i.data(), bias_i.data(), pose_j.data(), bias_j.data());
+      // problem.AddResidualBlock(new IMUFactor(prev_state.imu_preintegration), nullptr,
+      //                          pose_i.data(), bias_i.data(), pose_j.data(), bias_j.data());
 
-      problem.SetParameterBlockConstant(pose_i.data());
-      problem.SetParameterBlockConstant(bias_i.data());
+      // problem.SetParameterBlockConstant(pose_i.data());
+      // problem.SetParameterBlockConstant(bias_i.data());
       problem.AddParameterBlock(pose_j.data(), 7, new PoseLocalParameterization);
       problem.AddParameterBlock(bias_j.data(), 9, new ceres::SubsetParameterization(9, {3, 4, 5, 6, 7, 8}));
+      // todo kk set velocity constant
+      problem.SetParameterBlockConstant(bias_j.data());
     }
 
     ceres::Solve(options, &problem, &summary);
@@ -266,9 +269,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
       *pose_estimate_map_scan2world = pose_params;
     } else {
       *pose_estimate_map_scan2world = pose_j;
+      *velocity                     = bias_j.head<3>();
     }
   }
-  LOG(WARNING) << pose_estimate_map_scan2world->ToVector7().transpose();
+  LOG(WARNING) << "time= " << scan_curr.time << " ,pose= " << pose_estimate_map_scan2world->ToVector7().transpose() << " ,v= " << bias_j.head<3>().transpose();
   LOG_STEP_TIME("MAP", "Optimization twice", t_opt.toc());
 
   return true;

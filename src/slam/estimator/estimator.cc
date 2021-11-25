@@ -75,6 +75,11 @@ void Estimator::AddData(
 
   // todo do not use magic number here
   if (states_.size() == kInitByFirstScanNums) {
+    // init velocity before optimization
+    for (int i = 0; i < states_.size() - 1; ++i) {
+      states_[i].v     = (states_[i + 1].p - states_[i].p) / states_[i].imu_preintegration->dt_;
+      states_[i + 1].v = states_[i].v;
+    }
     ceres::Problem problem;
     problem.AddParameterBlock(gravity_.data(), 3, new ceres::HomogeneousVectorParameterization(3));
     for (int i = 0; i < states_.size() - 1; ++i) {

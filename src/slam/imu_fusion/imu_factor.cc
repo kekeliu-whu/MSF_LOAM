@@ -1,6 +1,8 @@
 
 #include "slam/imu_fusion/imu_factor.h"
 
+#include <glog/logging.h>
+
 bool IMUFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
   // P Q V Ba Bg are state to be estimated
   // P=(X,Y,Z)
@@ -36,8 +38,13 @@ bool IMUFactor::Evaluate(double const *const *parameters, double *residuals, dou
   // ceres take identity matrix as covariance
   // so we have to use llt decomposition for covariance, and then multiply it to the residual and Jacobian matrix respectively
   Eigen::Matrix<double, 15, 15> sqrt_info = Eigen::LLT<Eigen::Matrix<double, 15, 15>>(pre_integration_->covariance_.inverse()).matrixL().transpose();
-  //sqrt_info.setIdentity();
+  // sqrt_info.setIdentity();
+  sqrt_info = 0.001 * sqrt_info;
   residual = sqrt_info * residual;
+  // LOG(WARNING) << "preintegration->cov=\n"
+  //              << pre_integration_->covariance_;
+  // LOG(WARNING) << "sqrt_info=\n"
+  //              << sqrt_info;
 
   if (jacobians) {
     double sum_dt          = pre_integration_->sum_dt_;
@@ -51,7 +58,7 @@ bool IMUFactor::Evaluate(double const *const *parameters, double *residuals, dou
 
     if (pre_integration_->jacobian_.maxCoeff() > 1e8 || pre_integration_->jacobian_.minCoeff() < -1e8) {
       ROS_WARN("numerical unstable in preintegration");
-      //std::cout << pre_integration->jacobian << std::endl;
+      //LOG(WARNING) << pre_integration->jacobian ;
       ///                ROS_BREAK();
     }
 
@@ -119,6 +126,8 @@ bool IMUFactor::Evaluate(double const *const *parameters, double *residuals, dou
 
       //ROS_ASSERT(fabs(jacobian_pose_j.maxCoeff()) < 1e8);
       //ROS_ASSERT(fabs(jacobian_pose_j.minCoeff()) < 1e8);
+      // LOG(WARNING) << "jacobian_pose_j=\n"
+      //              << jacobian_pose_j;
     }
     if (jacobians[3]) {
       // eq49
@@ -133,6 +142,8 @@ bool IMUFactor::Evaluate(double const *const *parameters, double *residuals, dou
 
       //ROS_ASSERT(fabs(jacobian_speedbias_j.maxCoeff()) < 1e8);
       //ROS_ASSERT(fabs(jacobian_speedbias_j.minCoeff()) < 1e8);
+      // LOG(WARNING) << "jacobian_speedbias_j=\n"
+      //              << jacobian_speedbias_j;
     }
   }
 
