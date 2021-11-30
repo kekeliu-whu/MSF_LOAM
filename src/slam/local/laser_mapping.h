@@ -38,7 +38,7 @@ class LaserMapping {
       const std::vector<ImuData> &queue,
       LaserOdometryResultType &laser_odometry_result_deskewed);
 
-  void FilterScanFeature(const LaserOdometryResultType &odom_result, LaserOdometryResultType &odom_result_filtered);
+  void FilterLessFlatLessCornerFeature(const LaserOdometryResultType &odom_result, LaserOdometryResultType &odom_result_filtered);
 
   void MatchScan2Map(const LaserOdometryResultType &odom_result);
 

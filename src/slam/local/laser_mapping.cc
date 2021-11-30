@@ -90,7 +90,19 @@ LaserMapping::~LaserMapping() {
 
   // save point cloud map
   if (kEnableMapSave) {
+    // todo kk
+    G          = estimator.GetGravityVector();
+    auto q_l_w = Quaterniond::FromTwoVectors(G, Vector3d::UnitZ());
+
+    LOG(INFO) << "Gravity slope angle in degrees = " << q_l_w.angularDistance(Quaterniond::Identity()) * 180 / M_PI;
+
+    for (auto &e : *g_cloud_all) {
+      e.getVector3fMap() = q_l_w.cast<float>() * e.getVector3fMap();
+    }
+
+    LOG(INFO) << "Saving point cloud map ...";
     pcl::io::savePLYFileBinary("msf_loam_cloud.ply", *g_cloud_all);
+    LOG(INFO) << "Saving done.";
   }
 
   // save imu/odom data to proto file
@@ -164,7 +176,7 @@ void LaserMapping::Run() {
     // 2. match scan with surrounded map
     //
     TransformAssociateToMap();
-    FilterScanFeature(odom_result, odom_result);
+    FilterLessFlatLessCornerFeature(odom_result, odom_result);
     MatchScan2Map(odom_result);
     TransformUpdate();
 
@@ -309,27 +321,30 @@ void LaserMapping::InsertScan2Map(const LaserOdometryResultType &odom_result) {
       downsize_filter_surf_);
 }
 
-void LaserMapping::FilterScanFeature(
+void LaserMapping::FilterLessFlatLessCornerFeature(
     const LaserOdometryResultType &odom_result,
     LaserOdometryResultType &odom_result_filtered) {
-  // todo filter feature point
-  // PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
-  // PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
+  // copy all fields
+  auto odom_result_filtered_out           = odom_result.CopyAllFieldsWithoudCloud();
+  odom_result_filtered_out.cloud_full_res = odom_result.cloud_full_res;
 
-  // PointCloudPtr laserCloudCornerLastStack(new PointCloud);
-  // downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
-  // downsize_filter_corner_.filter(*laserCloudCornerLastStack);
+  PointCloudConstPtr laserCloudCornerLast = ToPointType(odom_result.cloud_corner_less_sharp);
+  PointCloudConstPtr laserCloudSurfLast   = ToPointType(odom_result.cloud_surf_less_flat);
 
-  // PointCloudPtr laserCloudSurfLastStack(new PointCloud);
-  // downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
-  // downsize_filter_surf_.filter(*laserCloudSurfLastStack);
+  PointCloudPtr laserCloudCornerLastStack(new PointCloud);
+  downsize_filter_corner_.setInputCloud(laserCloudCornerLast);
+  downsize_filter_corner_.filter(*laserCloudCornerLastStack);
+  auto indices = downsize_filter_corner_.getIndices();
+  pcl::copyPointCloud(*odom_result.cloud_corner_less_sharp, *indices, *odom_result_filtered_out.cloud_corner_less_sharp);
 
-  // // copy all fields
-  // auto odom_result_filtered_out                    = odom_result.CopyAllFieldsWithoudCloud();
-  // odom_result_filtered_out.cloud_corner_less_sharp = laserCloudCornerLastStack;
-  // odom_result_filtered_out.cloud_surf_less_flat    = laserCloudSurfLastStack;
+  PointCloudPtr laserCloudSurfLastStack(new PointCloud);
+  downsize_filter_surf_.setInputCloud(laserCloudSurfLast);
+  downsize_filter_surf_.filter(*laserCloudSurfLastStack);
+  indices = downsize_filter_corner_.getIndices();
+  pcl::copyPointCloud(*odom_result.cloud_surf_less_flat, *indices, *odom_result_filtered_out.cloud_surf_less_flat);
 
-  // odom_result_filtered = odom_result_filtered_out;
+  // handle situation when odom_result.get() == odom_result_filtered.get()
+  odom_result_filtered = odom_result_filtered_out;
 }
 
 void LaserMapping::PublishTrajectory(const LaserOdometryResultType &scan) {
