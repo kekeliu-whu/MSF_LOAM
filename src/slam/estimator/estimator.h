@@ -32,8 +32,8 @@ class Estimator {
   virtual ~Estimator() = default;
 
   // Add lidar odometry result and next lidar time
-  // 1. Collect imu preintegration measurements and add push it to obs_;
-  // 2. Init velocity-gravity when obs_.size()<kInitByFirstScanNums.
+  // 1. Collect imu preintegration measurements and add push it to states_;
+  // 2. Init velocity-gravity when states_.size()<kInitByFirstScanNums.
   void AddData(
       const LaserOdometryResultType &prev_odom,
       const Vector3d &velocity,
@@ -48,13 +48,13 @@ class Estimator {
   Vector3d GetGravityVector() const { return gravity_; }
 
   RobotState GetPrevState() const {
-    // CHECK_GT(obs_.size(), 0);
+    // CHECK_GT(states_.size(), 0);
     // todo kk
-    return obs_.size() > 0 ? obs_.back() : RobotState{};
+    return states_.size() > 0 ? states_.back() : RobotState{};
   }
 
  private:
-  std::vector<RobotState> obs_;
+  std::vector<RobotState> states_;
   Vector3d gravity_;
   bool is_initialized_;
 

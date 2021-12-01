@@ -381,7 +381,7 @@ void LaserMapping::UndistortScan(
     const std::vector<ImuData> &imu_buf,
     LaserOdometryResultType &laser_odometry_result_deskewed) {
   auto imu_preintegration = BuildPreintegration(imu_buf, laser_odometry_result.time);
-  ScanUndistortionUtils::DoUndistort(laser_odometry_result, *imu_preintegration, laser_odometry_result_deskewed);
+  ScanUndistortionUtils::DoUndistort(laser_odometry_result, imu_preintegration, laser_odometry_result_deskewed);
 }
 
 void LaserMapping::AddImu(const ImuData &imu_data) {

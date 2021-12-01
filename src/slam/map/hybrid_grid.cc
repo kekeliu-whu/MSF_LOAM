@@ -536,8 +536,6 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
 HybridGrid::HybridGrid(const float& resolution)
     : hybrid_grid_(new HybridGridImpl(resolution)) {}
 
-HybridGrid::~HybridGrid() { delete hybrid_grid_; }
-
 PointCloudPtr HybridGrid::GetSurroundedCloud(const PointCloudConstPtr& scan,
                                              const Rigid3d& pose) {
   return hybrid_grid_->GetSurroundedCloud(scan, pose);

@@ -64,30 +64,30 @@ void Estimator::AddData(
   rs.p    = curr_odom.map_pose.translation();
   rs.v    = velocity;
   rs.q    = curr_odom.map_pose.rotation();
-  if (obs_.empty()) {
-    obs_.push_back(rs);
+  if (states_.empty()) {
+    states_.push_back(rs);
     return;
   }
 
-  obs_.back().imu_preintegration = BuildPreintegration(imu_buf, obs_.back().time, curr_odom.time);
-  obs_.push_back(rs);
+  states_.back().imu_preintegration = BuildPreintegration(imu_buf, states_.back().time, curr_odom.time);
+  states_.push_back(rs);
 
   // todo do not use magic number here
-  if (obs_.size() == kInitByFirstScanNums) {
+  if (states_.size() == kInitByFirstScanNums) {
     ceres::Problem problem;
     problem.AddParameterBlock(gravity_.data(), 3, new ceres::HomogeneousVectorParameterization(3));
-    for (int i = 0; i < obs_.size() - 1; ++i) {
+    for (int i = 0; i < states_.size() - 1; ++i) {
       problem.AddResidualBlock(
           VelocityGravityInitFactor::Create(
-              {obs_[i].p, obs_[i].q},
-              {obs_[i + 1].p, obs_[i + 1].q},
-              ToSeconds(obs_[i + 1].time - obs_[i].time),
-              obs_[i].imu_preintegration->delta_p_,
-              obs_[i].imu_preintegration->delta_v_),
+              {states_[i].p, states_[i].q},
+              {states_[i + 1].p, states_[i + 1].q},
+              ToSeconds(states_[i + 1].time - states_[i].time),
+              states_[i].imu_preintegration->delta_p_,
+              states_[i].imu_preintegration->delta_v_),
           nullptr,
           gravity_.data(),
-          obs_[i].v.data(),
-          obs_[i + 1].v.data());
+          states_[i].v.data(),
+          states_[i + 1].v.data());
     }
     ceres::Solver::Options options;
     options.minimizer_progress_to_stdout = true;

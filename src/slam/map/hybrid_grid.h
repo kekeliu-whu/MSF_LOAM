@@ -27,7 +27,7 @@ class HybridGridImpl;
 class HybridGrid {
  public:
   explicit HybridGrid(const float& resolution);
-  ~HybridGrid();
+  virtual ~HybridGrid() = default;
 
   PointCloudPtr GetSurroundedCloud(const PointCloudConstPtr& scan,
                                    const Rigid3d& pose);
@@ -35,7 +35,7 @@ class HybridGrid {
   void InsertScan(const PointCloudPtr& scan, pcl::Filter<PointType>& filter);
 
  private:
-  HybridGridImpl* hybrid_grid_;
+  std::shared_ptr<HybridGridImpl> hybrid_grid_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_HYBRID_GRID_H
