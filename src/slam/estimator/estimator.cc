@@ -33,7 +33,8 @@ struct VelocityGravityInitFactor {
     Eigen::Map<const Eigen::Matrix<T, 3, 1>> v_j{_v_j};
     Eigen::Map<Eigen::Matrix<T, 6, 1>> r{residual};
     r.template head<3>() = q_i.conjugate() * (p_i - p_j + v_i * T(dt_) - T(0.5) * g * T(dt_) * T(dt_)) + delta_p_ij_.cast<T>();
-    r.template tail<3>() = q_i.conjugate() * (v_i - v_j - g * T(dt_)) + delta_v_ij_.cast<T>();
+    // todo kk here we use dt_ to regularize residuals of p and v
+    r.template tail<3>() = T(dt_) * (q_i.conjugate() * (v_i - v_j - g * T(dt_)) + delta_v_ij_.cast<T>());
     return true;
   }
 
