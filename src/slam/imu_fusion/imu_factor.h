@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ros/assert.h>
-
 #include "slam/imu_fusion/integration_base.h"
 #include "slam/imu_fusion/parameters.h"
 #include "slam/imu_fusion/utility.h"

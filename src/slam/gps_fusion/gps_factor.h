@@ -2,7 +2,6 @@
 #define MSF_LOAM_VELODYNE_GPS_FACTOR_H
 
 #include <ceres/ceres.h>
-#include <Eigen/Core>
 
 #include "common/rigid_transform.h"
 

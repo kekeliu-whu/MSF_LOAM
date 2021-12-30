@@ -4,7 +4,6 @@
 // #include "../parameters.h"
 using namespace std;
 
-#include <ros/console.h>
 #include <Eigen/Eigen>
 
 /* This class help you to calibrate extrinsic rotation between imu and camera when your totally don't konw the extrinsic parameter */

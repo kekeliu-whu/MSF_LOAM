@@ -2,6 +2,7 @@
 #include "slam/imu_fusion/imu_factor.h"
 
 #include <glog/logging.h>
+#include <ros/console.h>
 
 bool IMUFactor::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
   // P Q V Ba Bg are state to be estimated

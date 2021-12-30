@@ -34,20 +34,13 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <gflags/gflags.h>
 #include <nav_msgs/Odometry.h>
-#include <pcl/PCLPointCloud2.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <ros/ros.h>
-#include <rosbag/bag.h>
 #include <rosbag/view.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <Eigen/Eigen>
 
-#include "common/common.h"
 #include "common/tic_toc.h"
 #include "slam/local/laser_odometry.h"
 #include "slam/msg_conversion.h"

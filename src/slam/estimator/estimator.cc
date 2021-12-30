@@ -1,10 +1,7 @@
 #include <ceres/ceres.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <algorithm>
-#include <cstddef>
 
-#include "common/common.h"
 #include "slam/estimator/estimator.h"
 
 namespace {
