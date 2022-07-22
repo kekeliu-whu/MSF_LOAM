@@ -164,6 +164,7 @@ void LaserMapping::Run() {
     //
     {
       absl::MutexLock lg(&mtx_imu_buf_);
+      // 如果imu没有完成初始化，就使用旋转量进行去畸变处理
       if (!estimator.IsInitialized()) {
         UndistortScan(odom_result, imu_buf_, odom_result);
       }
@@ -186,6 +187,7 @@ void LaserMapping::Run() {
       absl::MutexLock lg(&mtx_imu_buf_);
       preintegration = BuildPreintegration(imu_buf_, odom_result.time);
     }
+    // 如果imu初始化完成了，就用imu预积分量计算精确的畸变值，进行去畸变处理
     if (estimator.IsInitialized()) {
       auto DoUndistort = [&](PointCloudOriginalPtr &cloud) {
         for (auto &e : *cloud) {
@@ -202,6 +204,7 @@ void LaserMapping::Run() {
       DoUndistort(odom_result.cloud_surf_less_flat);
     }
 
+    // 保存去畸变后的点云
     if (kEnableMapSave && estimator.IsInitialized()) {
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
