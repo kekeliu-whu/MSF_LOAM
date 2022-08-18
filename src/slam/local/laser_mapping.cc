@@ -7,7 +7,7 @@
 
 #include "common/common.h"
 #include "common/tic_toc.h"
-#include "msg.pb.h"
+#include "proto/msg.pb.h"
 #include "slam/imu_fusion/integration_base.h"
 #include "slam/imu_fusion/scan_undistortion.h"
 #include "slam/local/laser_mapping.h"

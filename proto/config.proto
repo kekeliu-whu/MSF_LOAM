@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package proto;
+
+import "proto/msg.proto";
+
+message ImuintrinsicParameters {
+  double gyroscope_noise_density = 1;
+  double accelerometer_noise_density = 2;
+  double gyroscope_random_walk = 3;
+  double accelerometer_random_walk = 4;
+  double update_rate = 5;
+}
+
+message MsfLoamConfig {
+  Rigid3d imu2lidar_extrinsic_parameters = 1;
+  ImuintrinsicParameters imu_intrinsic_parameters = 2;
+  Vector3d gravity_vector = 3;
+  bool save_pointcloud_map = 4;
+}

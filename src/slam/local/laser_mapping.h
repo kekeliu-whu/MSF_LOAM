@@ -12,7 +12,7 @@
 
 #include "common/common.h"
 #include "common/timestamped_pointcloud.h"
-#include "msg.pb.h"
+#include "proto/msg.pb.h"
 #include "slam/estimator/estimator.h"
 #include "slam/gps_fusion/gps_fusion.h"
 #include "slam/imu_fusion/types.h"

@@ -1,8 +1,8 @@
 # Online sensor parameter estimation
 [toc]
 
-## IMU instrinsic parameters
-IMU instrinsic parameters such as gyro bias can be calibrated by preintegration.
+## IMU intrinsic parameters
+IMU intrinsic parameters such as gyro bias can be calibrated by preintegration.
 
 ## IMU-Lidar extrinsic parameters
 $$ q^{b_k}_{l_{k+1}}=q^{b_k}_{b_{k+1}}\otimes q^b_l=q^b_l\otimes q^{l_k}_{l_{k+1}} $$  
