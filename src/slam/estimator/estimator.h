@@ -53,10 +53,11 @@ class Estimator {
     return states_.size() > 0 ? states_.back() : RobotState{};
   }
 
+ public:
+  static const int kInitByFirstScanNums = 50;
+
  private:
   std::vector<RobotState> states_;
   Vector3d gravity_;
   bool is_initialized_;
-
-  const int kInitByFirstScanNums = 50;
 };

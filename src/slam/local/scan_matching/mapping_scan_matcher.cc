@@ -57,6 +57,7 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
     *pose_estimate_map_scan2world = pose_j;
     *velocity                     = bias_j.head<3>();
+  } else {
   }
 
   TicToc t_opt;
@@ -80,7 +81,18 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
     ceres::Problem problem(problem_options);
     auto pose_params = pose_estimate_map_scan2world->ToVector7();
-    if (!is_initialized) {
+    if (is_initialized) {
+      // add imu factor
+      // problem.AddResidualBlock(new IMUFactor(prev_state.imu_preintegration), nullptr,
+      //                          pose_i.data(), bias_i.data(), pose_j.data(), bias_j.data());
+
+      // problem.SetParameterBlockConstant(pose_i.data());
+      // problem.SetParameterBlockConstant(bias_i.data());
+      problem.AddParameterBlock(pose_j.data(), 7, new PoseLocalParameterization);
+      problem.AddParameterBlock(bias_j.data(), 9, new ceres::SubsetParameterization(9, {3, 4, 5, 6, 7, 8}));
+      // todo kk if velocity not set constant, lidar trajectory will drift in illed situation
+      problem.SetParameterBlockConstant(bias_j.data());
+    } else {
       problem.AddParameterBlock(pose_params.data(), 7, se3_parameterization);
     }
 
@@ -238,23 +250,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     TicToc t_solver;
     ceres::Solver::Options options;
     options.max_num_iterations           = 6;
-    options.minimizer_progress_to_stdout = false;
+    options.minimizer_progress_to_stdout = true;
     ceres::Solver::Summary summary;
     if (iterCount == kOptimalNum - 1) {
       this->RefineByRejectOutliersWithThreshold(problem, 1);
-    }
-
-    if (is_initialized) {
-      // add imu factor
-      // problem.AddResidualBlock(new IMUFactor(prev_state.imu_preintegration), nullptr,
-      //                          pose_i.data(), bias_i.data(), pose_j.data(), bias_j.data());
-
-      // problem.SetParameterBlockConstant(pose_i.data());
-      // problem.SetParameterBlockConstant(bias_i.data());
-      problem.AddParameterBlock(pose_j.data(), 7, new PoseLocalParameterization);
-      problem.AddParameterBlock(bias_j.data(), 9, new ceres::SubsetParameterization(9, {3, 4, 5, 6, 7, 8}));
-      // todo kk set velocity constant
-      problem.SetParameterBlockConstant(bias_j.data());
     }
 
     ceres::Solve(options, &problem, &summary);
@@ -265,11 +264,11 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
     LOG_STEP_TIME("MAP", "Solver time", t_solver.toc());
 
     // attention: update by optimized pose_params(vector7)
-    if (!is_initialized) {
-      *pose_estimate_map_scan2world = pose_params;
-    } else {
+    if (is_initialized) {
       *pose_estimate_map_scan2world = pose_j;
       *velocity                     = bias_j.head<3>();
+    } else {
+      *pose_estimate_map_scan2world = pose_params;
     }
   }
   LOG(WARNING) << "time= " << scan_curr.time << " ,pose= " << pose_estimate_map_scan2world->ToVector7().transpose() << " ,v= " << bias_j.head<3>().transpose();

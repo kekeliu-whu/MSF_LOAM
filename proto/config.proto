@@ -13,7 +13,7 @@ message ImuintrinsicParameters {
 }
 
 message MsfLoamConfig {
-  Rigid3d imu2lidar_extrinsic_parameters = 1;
+  Rigid3d lidar2imu_extrinsic_parameters = 1;
   ImuintrinsicParameters imu_intrinsic_parameters = 2;
   Vector3d gravity_vector = 3;
   bool save_pointcloud_map = 4;

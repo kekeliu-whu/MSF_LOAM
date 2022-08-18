@@ -102,8 +102,12 @@ LaserMapping::~LaserMapping() {
     }
 
     LOG(INFO) << "Saving point cloud map ...";
-    pcl::io::savePLYFileBinary("msf_loam_cloud.ply", *g_cloud_all);
-    LOG(INFO) << "Saving done.";
+    if (g_cloud_all->empty()) {
+      pcl::io::savePLYFileBinary("msf_loam_cloud.ply", *g_cloud_all);
+      LOG(INFO) << "Saving done.";
+    } else {
+      LOG(WARNING) << "Saving skipped because point cloud is empty.";
+    }
   }
 
   // save imu/odom data to proto file
@@ -205,7 +209,7 @@ void LaserMapping::Run() {
     }
 
     // 保存去畸变后的点云
-    if (kEnableMapSave && estimator.IsInitialized()) {
+    if (frame_idx_cur_ >= Estimator::kInitByFirstScanNums) {
       auto cloud = TransformPointCloud<PointTypeOriginal>(odom_result.cloud_full_res, pose_map_scan2world_);
       *g_cloud_all += *cloud;
     }

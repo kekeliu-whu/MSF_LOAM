@@ -403,8 +403,7 @@ void HandleOdomMessage(
 
 int main(int argc, char **argv) {
   // Set glog and gflags
-  FLAGS_alsologtostderr  = true;
-  FLAGS_colorlogtostderr = true;
+  FLAGS_alsologtostderr = true;
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 

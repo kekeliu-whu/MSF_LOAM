@@ -1,10 +1,10 @@
 {
   "gravity_vector": {
-    "x": 1,
-    "y": 1,
-    "z": 1
+    "x": 0,
+    "y": 0,
+    "z": 9.81
   },
-  "imu2lidar_extrinsic_parameters": {
+  "lidar2imu_extrinsic_parameters": {
     "rotation": {
       "w": 1,
       "x": 0,
