@@ -26,7 +26,7 @@ inline typename pcl::PointCloud<T>::Ptr TransformPointCloud(const typename pcl::
   typename pcl::PointCloud<T>::Ptr cloud_out(new pcl::PointCloud<T>);
   cloud_out->resize(cloud_in->size());
   for (size_t i = 0; i < cloud_in->size(); ++i)
-    cloud_out->at(i) = pose * cloud_in->at(i);
+    cloud_out->at(i) = TransformPoint(pose, cloud_in->at(i));
   return cloud_out;
 }
 
@@ -37,7 +37,7 @@ double ACC_N = 0.017, ACC_W = 0.007;
 double GYR_N = 0.0033, GYR_W = 0.0012;
 Eigen::Vector3d G;
 
-LaserMapping::LaserMapping(bool is_offline_mode)
+LaserMapping::LaserMapping(bool is_offline_mode, proto::MsfLoamConfig config)
     : gps_fusion_handler_(std::make_shared<GpsFusion>()),
       scan_matcher_(std::make_unique<MappingScanMatcher>()),
       frame_idx_cur_(0),
@@ -46,7 +46,9 @@ LaserMapping::LaserMapping(bool is_offline_mode)
       is_offline_mode_(is_offline_mode),
       is_firstframe_(true),
       should_exit_(false),
-      velocity_(Vector3d::Zero()) {
+      velocity_(Vector3d::Zero()),
+      config_(config),
+      estimator_(FromProto(config.gravity_vector())) {
   // NodeHandle uses reference counting internally,
   // thus a local variable can be created here
   ros::NodeHandle nh;
@@ -92,7 +94,7 @@ LaserMapping::~LaserMapping() {
   // save point cloud map
   if (kEnableMapSave) {
     // todo kk
-    G          = estimator.GetGravityVector();
+    G          = estimator_.GetGravityVector();
     auto q_l_w = Quaterniond::FromTwoVectors(G, Vector3d::UnitZ());
 
     LOG(INFO) << "Gravity slope angle in degrees = " << q_l_w.angularDistance(Quaterniond::Identity()) * 180 / M_PI;
@@ -169,7 +171,7 @@ void LaserMapping::Run() {
     {
       absl::MutexLock lg(&mtx_imu_buf_);
       // 如果imu没有完成初始化，就使用旋转量进行去畸变处理
-      if (!estimator.IsInitialized()) {
+      if (!estimator_.IsInitialized()) {
         UndistortScan(odom_result, imu_buf_, odom_result);
       }
     }
@@ -192,12 +194,12 @@ void LaserMapping::Run() {
       preintegration = BuildPreintegration(imu_buf_, odom_result.time);
     }
     // 如果imu初始化完成了，就用imu预积分量计算精确的畸变值，进行去畸变处理
-    if (estimator.IsInitialized()) {
+    if (estimator_.IsInitialized()) {
       auto DoUndistort = [&](PointCloudOriginalPtr &cloud) {
         for (auto &e : *cloud) {
           auto dt            = e.intensity;
           auto delta_qp      = GetDeltaQP(preintegration, dt);
-          e.getVector3fMap() = (std::get<0>(delta_qp) * e.getVector3fMap().cast<double>() + this->pose_odom_scan2world_.rotation().conjugate() * (velocity_ * dt - 0.5 * estimator.GetGravityVector() * dt * dt) + std::get<1>(delta_qp))
+          e.getVector3fMap() = (std::get<0>(delta_qp) * e.getVector3fMap().cast<double>() + this->pose_odom_scan2world_.rotation().conjugate() * (velocity_ * dt - 0.5 * estimator_.GetGravityVector() * dt * dt) + std::get<1>(delta_qp))
                                    .cast<float>();
         }
       };
@@ -235,11 +237,11 @@ void LaserMapping::Run() {
     // todo init bias and gravity vector by set device still
     {
       absl::MutexLock lg(&mtx_imu_buf_);
-      estimator.AddData(odom_result, velocity_, imu_buf_);
+      estimator_.AddData(odom_result, velocity_, imu_buf_);
       static bool is_first_init = true;
-      if (estimator.IsInitialized() && is_first_init) {
+      if (estimator_.IsInitialized() && is_first_init) {
         is_first_init = false;
-        G             = estimator.GetGravityVector();
+        G             = estimator_.GetGravityVector();
         // todo do not use cloud in init procedure
         // this->hybrid_grid_map_surf_   = HybridGrid(3.0);
         // this->hybrid_grid_map_corner_ = HybridGrid(3.0);
@@ -292,7 +294,7 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
       absl::MutexLock lg(&mtx_imu_buf_);
       preintegration = BuildPreintegration(imu_buf_, odom_result.time);
     }
-    auto prev_state = estimator.GetPrevState();
+    auto prev_state = estimator_.GetPrevState();
     {
       // todo kk
       absl::MutexLock lg{&mtx_imu_buf_};
@@ -301,9 +303,9 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
     }
     scan_matcher_->MatchScan2Map(cloud_map,
                                  scan_curr,
-                                 estimator.IsInitialized(),
+                                 estimator_.IsInitialized(),
                                  preintegration,
-                                 estimator.GetGravityVector(),
+                                 estimator_.GetGravityVector(),
                                  prev_state,
                                  &pose_map_scan2world_,
                                  &velocity_);

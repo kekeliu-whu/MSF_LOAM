@@ -115,12 +115,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
       std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
 
       if (is_initialized) {
-        pointSel = *pose_estimate_map_scan2world * (Rigid3d{
-                                                        pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p,
-                                                        delta_q} *
-                                                    pointOri);
+        pointSel = TransformPoint(*pose_estimate_map_scan2world * Rigid3d{pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p, delta_q},
+                             pointOri);
       } else {
-        pointSel = *pose_estimate_map_scan2world * pointOri;
+        pointSel = TransformPoint(*pose_estimate_map_scan2world, pointOri);
       }
       kdtreeCornerFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                           pointSearchSqDis);
@@ -185,12 +183,10 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
       std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
 
       if (is_initialized) {
-        pointSel = *pose_estimate_map_scan2world * (Rigid3d{
-                                                        pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p,
-                                                        delta_q} *
-                                                    pointOri);
+        pointSel = TransformPoint(*pose_estimate_map_scan2world * Rigid3d{pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p, delta_q},
+                             pointOri);
       } else {
-        pointSel = *pose_estimate_map_scan2world * pointOri;
+        pointSel = TransformPoint(*pose_estimate_map_scan2world, pointOri);
       }
       kdtreeSurfFromMap->nearestKSearch(pointSel, 5, pointSearchInd,
                                         pointSearchSqDis);

@@ -5,7 +5,7 @@
     <param name="mapping_line_resolution" type="double" value="0.2" />
     <param name="mapping_plane_resolution" type="double" value="0.4" />
 
-    <node pkg="msf_loam_velodyne" type="msf_loam_node" name="msf_loam_node" output="screen" args="--log_dir=/tmp" />
+    <node pkg="msf_loam_velodyne" type="msf_loam_node" name="msf_loam_node" output="screen" args="--log_dir=/tmp --config_filename=$(find msf_loam_velodyne)/config/lio-sam-config2.json" />
 
     <arg name="rviz" default="true" />
     <group if="$(arg rviz)">

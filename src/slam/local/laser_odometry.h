@@ -5,12 +5,13 @@
 
 #include "common/timestamped_pointcloud.h"
 #include "laser_mapping.h"
+#include "proto/config.pb.h"
 #include "slam/imu_fusion/types.h"
 #include "slam/local/scan_matching/odometry_scan_matcher.h"
 
 class LaserOdometry {
  public:
-  explicit LaserOdometry(bool is_offline_mode);
+  explicit LaserOdometry(bool is_offline_mode, proto::MsfLoamConfig config);
 
   ~LaserOdometry();
 
@@ -38,6 +39,8 @@ class LaserOdometry {
   ros::Publisher laser_path_publisher_;
 
   nav_msgs::Path laser_path_;
+
+  proto::MsfLoamConfig config_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_ODOMETRY_H

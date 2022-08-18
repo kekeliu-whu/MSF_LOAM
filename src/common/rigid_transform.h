@@ -129,18 +129,19 @@ using Rigid3f = Rigid3<float>;
 
 #include "common/common.h"
 
-inline PointType operator*(const Rigid3d& transform, const PointType& point) {
-  PointType point_out = point;
+template <typename T>
+inline T TransformPoint(const Rigid3d& transform, const T& point) {
+  T point_out = point;
   point_out.getVector3fMap() =
-      (transform * point.getVector3fMap().cast<double>()).cast<float>();
+      (transform * point.getVector3fMap().template cast<double>()).template cast<float>();
   return point_out;
 }
 
-inline PointTypeOriginal operator*(const Rigid3d& transform, const PointTypeOriginal& point) {
-  PointTypeOriginal point_out = point;
-  point_out.getVector3fMap() =
-      (transform * point.getVector3fMap().cast<double>()).cast<float>();
-  return point_out;
+template <typename T>
+void TransformPointCloudInPlace(const Rigid3d& transform, pcl::PointCloud<T>& pc) {
+  for (auto&& point : pc) {
+    point.getVector3fMap() = (transform * point.getVector3fMap().template cast<double>()).template cast<float>();
+  }
 }
 
 #endif  // LOAM_VELODYNE_RIGID_TRANSFORM_H

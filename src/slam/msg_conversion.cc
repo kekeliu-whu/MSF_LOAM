@@ -60,3 +60,7 @@ Vector3d FromProto(const proto::Vector3d &pv) {
 Quaterniond FromProto(const proto::Quaterniond &pv) {
   return {pv.w(), pv.x(), pv.y(), pv.z()};
 }
+
+Rigid3d FromProto(const proto::Rigid3d &r) {
+  return {FromProto(r.translation()), FromProto(r.rotation())};
+}

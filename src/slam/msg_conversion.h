@@ -23,4 +23,6 @@ Vector3d FromProto(const proto::Vector3d &pv);
 
 Quaterniond FromProto(const proto::Quaterniond &pv);
 
+Rigid3d FromProto(const proto::Rigid3d &r);
+
 #endif  // MSF_LOAM_VELODYNE_MSG_CONVERSION_H

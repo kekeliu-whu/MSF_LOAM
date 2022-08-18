@@ -26,8 +26,8 @@ std::shared_ptr<IntegrationBase> BuildPreintegration(
 class Estimator {
  public:
   // todo kk do not use magic number here
-  Estimator() : is_initialized_(false),
-                gravity_(0, 0, 9.8055) {}
+  Estimator(const Vector3d &gravity) : is_initialized_(false),
+                                       gravity_(gravity) {}
 
   virtual ~Estimator() = default;
 

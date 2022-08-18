@@ -12,6 +12,7 @@
 
 #include "common/common.h"
 #include "common/timestamped_pointcloud.h"
+#include "proto/config.pb.h"
 #include "proto/msg.pb.h"
 #include "slam/estimator/estimator.h"
 #include "slam/gps_fusion/gps_fusion.h"
@@ -21,7 +22,7 @@
 
 class LaserMapping {
  public:
-  explicit LaserMapping(bool is_offline_mode);
+  explicit LaserMapping(bool is_offline_mode, proto::MsfLoamConfig config);
 
   ~LaserMapping();
 
@@ -71,7 +72,7 @@ class LaserMapping {
   std::queue<LaserOdometryResultType> odometry_result_queue_ ABSL_GUARDED_BY(mtx_odometry_result_queue_);
   boost::optional<LaserOdometryResultType> prev_odometry_result_;
 
-  Estimator estimator;
+  Estimator estimator_;
 
   HybridGrid hybrid_grid_map_corner_;
   HybridGrid hybrid_grid_map_surf_;
@@ -120,6 +121,8 @@ class LaserMapping {
   volatile bool should_exit_;
 
   proto::PbData pb_data_;
+
+  proto::MsfLoamConfig config_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H

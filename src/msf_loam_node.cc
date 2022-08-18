@@ -34,6 +34,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
+#include <google/protobuf/util/json_util.h>
 #include <nav_msgs/Odometry.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -41,13 +42,17 @@
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include "common/rigid_transform.h"
 #include "common/tic_toc.h"
+#include "proto/config.pb.h"
 #include "slam/local/laser_odometry.h"
 #include "slam/msg_conversion.h"
 
 DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
 
 DEFINE_string(bag_filename, "", "Bag file to read in offline mode.");
+
+DEFINE_string(config_filename, "", "Configuration file.");
 
 namespace {
 
@@ -76,6 +81,7 @@ const double kScanPeriod = 0.1;  // 扫描周期
 double g_min_range;              // 最小扫描距离
 std::uint64_t g_imu_msgs_num = 0;
 sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
+Rigid3d g_lidar2imu_transfrom;
 
 template <typename PointT>
 void RemoveInvalidPointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
@@ -348,12 +354,23 @@ void RealHandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
   TimestampedPointCloud<PointTypeOriginal> scan;
-  scan.time                    = FromRos(laser_cloud_msg->header.stamp);
+  scan.time = FromRos(laser_cloud_msg->header.stamp);
+
+  //
+  // todo
   scan.cloud_full_res          = laser_cloud;
   scan.cloud_surf_less_flat    = cloud_surf_less_flat;
   scan.cloud_surf_flat         = cloud_surf_flat;
   scan.cloud_corner_less_sharp = cloud_corner_less_sharp;
   scan.cloud_corner_sharp      = cloud_corner_sharp;
+
+  // todo function should not be handled here
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_full_res);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_surf_less_flat);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_surf_flat);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_corner_less_sharp);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_corner_sharp);
+
   laser_odometry_handler->AddLaserScan(scan);
 
   LOG_STEP_TIME("REG", "Scan registration", t_whole.toc());
@@ -407,6 +424,18 @@ int main(int argc, char **argv) {
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 
+  // Read config file
+  std::ifstream file(FLAGS_config_filename);
+  CHECK(file.is_open()) << "Open file '" << FLAGS_config_filename << "' failed.";
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+
+  proto::MsfLoamConfig proto_cfg;
+  auto status = google::protobuf::util::JsonStringToMessage(buffer.str(), &proto_cfg);
+  CHECK(status.ok()) << "Parse configuration file '" << FLAGS_config_filename << "' failed: " << status.error_message();
+  LOG(INFO) << "Read configuration file success:\n"
+            << proto_cfg.DebugString();
+
   // Set ROS node
   ros::init(argc, argv, "nsf_loam_node");
   ros::NodeHandle nh;
@@ -414,8 +443,10 @@ int main(int argc, char **argv) {
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
       << "Use default minimum_range: 0.3";
 
+  g_lidar2imu_transfrom = FromProto(proto_cfg.lidar2imu_extrinsic_parameters());
+
   auto laser_odometry_handler =
-      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode);
+      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, proto_cfg);
 
   if (FLAGS_is_offline_mode) {
     CHECK(!FLAGS_bag_filename.empty());
