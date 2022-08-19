@@ -111,12 +111,14 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
       Quaterniond delta_q;
       Vector3d delta_p;
-      auto dt                    = pointOri.intensity;
-      std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
+      auto dt       = pointOri.intensity;
+      auto delta_qp = GetDeltaQP(preintegration, dt);
+      delta_q       = delta_qp.rotation();
+      delta_p       = delta_qp.translation();
 
       if (is_initialized) {
         pointSel = TransformPoint(*pose_estimate_map_scan2world * Rigid3d{pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p, delta_q},
-                             pointOri);
+                                  pointOri);
       } else {
         pointSel = TransformPoint(*pose_estimate_map_scan2world, pointOri);
       }
@@ -179,12 +181,14 @@ bool MappingScanMatcher::MatchScan2Map(const TimestampedPointCloud<PointType> &c
 
       Quaterniond delta_q;
       Vector3d delta_p;
-      auto dt                    = pointOri.intensity;
-      std::tie(delta_q, delta_p) = GetDeltaQP(preintegration, dt);
+      auto dt       = pointOri.intensity;
+      auto delta_qp = GetDeltaQP(preintegration, dt);
+      delta_q       = delta_qp.rotation();
+      delta_p       = delta_qp.translation();
 
       if (is_initialized) {
         pointSel = TransformPoint(*pose_estimate_map_scan2world * Rigid3d{pose_estimate_map_scan2world->rotation().conjugate() * (Vi * dt - 0.5 * gravity_vector * dt * dt) + delta_p, delta_q},
-                             pointOri);
+                                  pointOri);
       } else {
         pointSel = TransformPoint(*pose_estimate_map_scan2world, pointOri);
       }

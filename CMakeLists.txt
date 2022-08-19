@@ -82,6 +82,7 @@ set(
     src/slam/imu_fusion/initial_ex_rotation.cc
     src/slam/imu_fusion/pose_local_parameterization.cc
     src/slam/imu_fusion/scan_undistortion.cc
+    src/slam/imu_fusion/integration_base.cc
     src/slam/map/hybrid_grid.cc
     src/slam/msg_conversion.cc
     src/slam/estimator/estimator.cc

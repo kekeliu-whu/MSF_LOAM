@@ -104,7 +104,7 @@ LaserMapping::~LaserMapping() {
     }
 
     LOG(INFO) << "Saving point cloud map ...";
-    if (g_cloud_all->empty()) {
+    if (!g_cloud_all->empty()) {
       pcl::io::savePLYFileBinary("msf_loam_cloud.ply", *g_cloud_all);
       LOG(INFO) << "Saving done.";
     } else {
@@ -130,8 +130,8 @@ void LaserMapping::AddLaserOdometryResult(
   nav_msgs::Odometry aftmapped_odom;
   aftmapped_odom.child_frame_id  = "aft_mapped";
   aftmapped_odom.header.frame_id = "camera_init";
-  aftmapped_odom.header.stamp    = ToRos(laser_odometry_result.time);
-  aftmapped_odom.pose            = ToRos(pose_odom2map_ * laser_odometry_result.odom_pose);
+  aftmapped_odom.header.stamp    = ToROS(laser_odometry_result.time);
+  aftmapped_odom.pose            = ToROS(pose_odom2map_ * laser_odometry_result.odom_pose);
   aftmapped_odom_highfrec_publisher_.publish(aftmapped_odom);
 }
 
@@ -199,7 +199,7 @@ void LaserMapping::Run() {
         for (auto &e : *cloud) {
           auto dt            = e.intensity;
           auto delta_qp      = GetDeltaQP(preintegration, dt);
-          e.getVector3fMap() = (std::get<0>(delta_qp) * e.getVector3fMap().cast<double>() + this->pose_odom_scan2world_.rotation().conjugate() * (velocity_ * dt - 0.5 * estimator_.GetGravityVector() * dt * dt) + std::get<1>(delta_qp))
+          e.getVector3fMap() = (delta_qp.rotation() * e.getVector3fMap().cast<double>() + this->pose_odom_scan2world_.rotation().conjugate() * (velocity_ * dt - 0.5 * estimator_.GetGravityVector() * dt * dt) + delta_qp.translation())
                                    .cast<float>();
         }
       };
@@ -321,7 +321,7 @@ void LaserMapping::MatchScan2Map(const LaserOdometryResultType &odom_result) {
 
     sensor_msgs::PointCloud2 laserCloudSurround3;
     pcl::toROSMsg(*laserCloudSurround, laserCloudSurround3);
-    laserCloudSurround3.header.stamp    = ToRos(odom_result.time);
+    laserCloudSurround3.header.stamp    = ToROS(odom_result.time);
     laserCloudSurround3.header.frame_id = "camera_init";
     cloud_surround_publisher_.publish(laserCloudSurround3);
   }
@@ -366,9 +366,9 @@ void LaserMapping::FilterLessFlatLessCornerFeature(
 void LaserMapping::PublishTrajectory(const LaserOdometryResultType &scan) {
   nav_msgs::Odometry aftmapped_odom;
   aftmapped_odom.header.frame_id = "camera_init";
-  aftmapped_odom.header.stamp    = ToRos(scan.time);
+  aftmapped_odom.header.stamp    = ToROS(scan.time);
   aftmapped_odom.child_frame_id  = "aft_mapped";
-  aftmapped_odom.pose            = ToRos(pose_map_scan2world_);
+  aftmapped_odom.pose            = ToROS(pose_map_scan2world_);
   aftmapped_odom_publisher_.publish(aftmapped_odom);
 
   geometry_msgs::PoseStamped laserAfterMappedPose;
@@ -418,31 +418,31 @@ void LaserMapping::AddImu(const ImuData &imu_data) {
 void LaserMapping::PublishScan(const LaserOdometryResultType &scan) {
   sensor_msgs::PointCloud2 laser_cloud_out_msg;
   pcl::toROSMsg(*scan.cloud_full_res, laser_cloud_out_msg);
-  laser_cloud_out_msg.header.stamp    = ToRos(scan.time);
+  laser_cloud_out_msg.header.stamp    = ToROS(scan.time);
   laser_cloud_out_msg.header.frame_id = "aft_mapped";
   cloud_scan_publisher_.publish(laser_cloud_out_msg);
 
   sensor_msgs::PointCloud2 cloud_corner_sharp_msg;
   pcl::toROSMsg(*scan.cloud_corner_sharp, cloud_corner_sharp_msg);
-  cloud_corner_sharp_msg.header.stamp    = ToRos(scan.time);
+  cloud_corner_sharp_msg.header.stamp    = ToROS(scan.time);
   cloud_corner_sharp_msg.header.frame_id = "aft_mapped";
   cloud_corner_publisher_.publish(cloud_corner_sharp_msg);
 
   sensor_msgs::PointCloud2 cloud_corner_less_sharp_msg;
   pcl::toROSMsg(*scan.cloud_corner_less_sharp, cloud_corner_less_sharp_msg);
-  cloud_corner_less_sharp_msg.header.stamp    = ToRos(scan.time);
+  cloud_corner_less_sharp_msg.header.stamp    = ToROS(scan.time);
   cloud_corner_less_sharp_msg.header.frame_id = "aft_mapped";
   cloud_corner_less_publisher_.publish(cloud_corner_less_sharp_msg);
 
   sensor_msgs::PointCloud2 cloud_surf_flat_msg;
   pcl::toROSMsg(*scan.cloud_surf_flat, cloud_surf_flat_msg);
-  cloud_surf_flat_msg.header.stamp    = ToRos(scan.time);
+  cloud_surf_flat_msg.header.stamp    = ToROS(scan.time);
   cloud_surf_flat_msg.header.frame_id = "aft_mapped";
   cloud_surf_publisher_.publish(cloud_surf_flat_msg);
 
   sensor_msgs::PointCloud2 cloud_surf_less_flat_msg;
   pcl::toROSMsg(*scan.cloud_surf_less_flat, cloud_surf_less_flat_msg);
-  cloud_surf_less_flat_msg.header.stamp    = ToRos(scan.time);
+  cloud_surf_less_flat_msg.header.stamp    = ToROS(scan.time);
   cloud_surf_less_flat_msg.header.frame_id = "aft_mapped";
   cloud_surf_less_publisher_.publish(cloud_surf_less_flat_msg);
 }

@@ -2,18 +2,25 @@
 #define MSF_LOAM_VELODYNE_MSG_CONVERSION_H
 
 #include <geometry_msgs/PoseWithCovariance.h>
+#include <geometry_msgs/Vector3.h>
 
 #include "common/rigid_transform.h"
 #include "common/time.h"
 #include "proto/msg.pb.h"
 
-Rigid3d FromRos(const geometry_msgs::PoseWithCovariance &pose_msg);
+Vector3d FromROS(const geometry_msgs::Vector3_<std::allocator<void>> &v);
 
-geometry_msgs::PoseWithCovariance ToRos(const Rigid3d &pose);
+Vector3d FromROS(const geometry_msgs::Point_<std::allocator<void>> &o);
 
-Time FromRos(const ros::Time &time);
+Quaterniond FromROS(const geometry_msgs::Quaternion_<std::allocator<void>> &p);
 
-ros::Time ToRos(const Time &time);
+Rigid3d FromROS(const geometry_msgs::PoseWithCovariance &pose_msg);
+
+geometry_msgs::PoseWithCovariance ToROS(const Rigid3d &pose);
+
+Time FromROS(const ros::Time &time);
+
+ros::Time ToROS(const Time &time);
 
 proto::Vector3d ToProto(const Vector3d &v);
 

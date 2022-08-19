@@ -80,7 +80,6 @@ const int kMaxScanNum    = 128;
 const double kScanPeriod = 0.1;  // 扫描周期
 double g_min_range;              // 最小扫描距离
 std::uint64_t g_imu_msgs_num = 0;
-sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
 Rigid3d g_lidar2imu_transfrom;
 
 template <typename PointT>
@@ -354,7 +353,7 @@ void RealHandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
   TimestampedPointCloud<PointTypeOriginal> scan;
-  scan.time = FromRos(laser_cloud_msg->header.stamp);
+  scan.time = FromROS(laser_cloud_msg->header.stamp);
 
   //
   // todo
@@ -382,15 +381,11 @@ void TryHandleLaserCloudMessageWithImuIntegrated(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   // todo remove magic number
-  if (g_imu_msgs_num <= 200) {
-    LOG(WARNING) << "Waiting for imu data...";
+  if (g_imu_msgs_num <= 100) {
+    LOG(WARNING) << "Waiting for imu data, lidar frame @" << laser_cloud_msg->header.stamp.toNSec() << " will be ignored ...";
     return;
   }
-  if (g_prev_laser_cloud_msgs) {
-    // delay to handle laser message for retrieving imu data
-    RealHandleLaserCloudMessage(g_prev_laser_cloud_msgs, laser_odometry_handler);
-  }
-  g_prev_laser_cloud_msgs = laser_cloud_msg;
+  RealHandleLaserCloudMessage(laser_cloud_msg, laser_odometry_handler);
 }
 
 void HandleImuMessage(
@@ -398,13 +393,9 @@ void HandleImuMessage(
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   g_imu_msgs_num++;
   ImuData imu_data;
-  imu_data.time = FromRos(imu_msg->header.stamp);
-  imu_data.linear_acceleration << imu_msg->linear_acceleration.x,
-      imu_msg->linear_acceleration.y,
-      imu_msg->linear_acceleration.z;
-  imu_data.angular_velocity << imu_msg->angular_velocity.x,
-      imu_msg->angular_velocity.y,
-      imu_msg->angular_velocity.z;
+  imu_data.time                = FromROS(imu_msg->header.stamp);
+  imu_data.linear_acceleration = FromROS(imu_msg->linear_acceleration);
+  imu_data.angular_velocity    = FromROS(imu_msg->angular_velocity);
   laser_odometry_handler->AddImu(imu_data);
 }
 
@@ -412,8 +403,8 @@ void HandleOdomMessage(
     const nav_msgs::OdometryConstPtr &odom_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   OdometryData odom_data;
-  odom_data.timestamp = FromRos(odom_msg->header.stamp);
-  odom_data.odom      = FromRos(odom_msg->pose);
+  odom_data.timestamp = FromROS(odom_msg->header.stamp);
+  odom_data.odom      = FromROS(odom_msg->pose);
   odom_data.error     = 0;
   laser_odometry_handler->AddOdom(odom_data);
 }
@@ -480,7 +471,11 @@ int main(int argc, char **argv) {
     ros::Subscriber subOdom = nh.subscribe<nav_msgs::Odometry>(
         "/odometry_gt", 100,
         boost::bind(HandleOdomMessage, _1, boost::ref(laser_odometry_handler)));
-    ros::spin();
+
+    // Use AsyncSpinner to handle mutiple message queue with multiple threads
+    ros::AsyncSpinner spinner(4);
+    spinner.start();
+    ros::waitForShutdown();
   }
 
   return 0;

@@ -1,6 +1,8 @@
 #ifndef LOAM_VELODYNE_ODOMETRY_SCAN_MATCHER_H
 #define LOAM_VELODYNE_ODOMETRY_SCAN_MATCHER_H
 
+#include <pcl/common/io.h>
+
 #include "scan_matcher.h"
 
 class OdometryScanMatcher : public ScanMatcher {

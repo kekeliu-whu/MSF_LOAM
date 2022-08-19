@@ -106,8 +106,8 @@ void LaserOdometry::PublishTrajectory(const TimestampedPointCloud<PointTypeOrigi
   nav_msgs::Odometry laserOdometry;
   laserOdometry.header.frame_id = "camera_init";
   laserOdometry.child_frame_id  = "laser_odom";
-  laserOdometry.header.stamp    = ToRos(scan_curr.time);
-  laserOdometry.pose            = ToRos(scan_curr.odom_pose);
+  laserOdometry.header.stamp    = ToROS(scan_curr.time);
+  laserOdometry.pose            = ToROS(scan_curr.odom_pose);
   laser_odom_publisher_.publish(laserOdometry);
 
   geometry_msgs::PoseStamped laserPose;
