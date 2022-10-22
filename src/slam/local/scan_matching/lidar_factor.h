@@ -4,68 +4,117 @@
 #pragma once
 
 #include <ceres/ceres.h>
-#include <Eigen/Core>
 
-/**
- * @brief “点-线”距离最小化
- *
- * residual[0] = 面积 / 线段长
- *
- */
-struct LidarEdgeFactor {
-  LidarEdgeFactor(const Eigen::Vector3d &curr_point,
-                  const Eigen::Vector3d &last_point_a,
-                  const Eigen::Vector3d &last_point_b, double s)
+#include "slam/imu_fusion/utility.h"
+
+struct LidarEdgeFactorSE3 : ceres::SizedCostFunction<3, 7> {
+ public:
+  LidarEdgeFactorSE3(const Eigen::Vector3d &curr_point,
+                     const Eigen::Vector3d &last_line_C,
+                     const Eigen::Vector3d &last_line_N)
       : curr_point_(curr_point),
-        last_point_a_(last_point_a),
-        last_point_b_(last_point_b),
-        s_(s) {}
+        last_line_C_(last_line_C),
+        last_line_N_(last_line_N) {}
 
-  template <typename T>
-  bool operator()(const T *q, const T *t, T *residual) const;
-
-  static ceres::CostFunction *Create(const Eigen::Vector3d &curr_point,
-                                     const Eigen::Vector3d &last_point_a,
-                                     const Eigen::Vector3d &last_point_b,
-                                     const double s);
+  virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
 
  private:
-  const Eigen::Vector3d curr_point_, last_point_a_, last_point_b_;
-  const double s_;
+  const Eigen::Vector3d curr_point_;
+  const Eigen::Vector3d last_line_C_;
+  const Eigen::Vector3d last_line_N_;
+
+  static constexpr int kResidualNums = 3;
 };
 
-/**
- * @brief “点-面”距离最小化
- *
- * 已知单点和三点构成的面
- * residual[0] = 棱向量 · 平面法向量
- *
- */
-struct LidarPlaneFactor {
-  LidarPlaneFactor(const Eigen::Vector3d &curr_point,
-                   const Eigen::Vector3d &last_plane_C,
-                   const Eigen::Vector3d &last_plane_N, double s)
+struct LidarEdgeFactorDeskewSE3 : ceres::SizedCostFunction<3, 7, 9> {
+ public:
+  LidarEdgeFactorDeskewSE3(const Eigen::Vector3d &curr_point,
+                           const Eigen::Vector3d &last_line_C,
+                           const Eigen::Vector3d &last_line_N,
+                           const Eigen::Vector3d &delta_p,
+                           const Eigen::Quaterniond &delta_q,
+                           const double &dt,
+                           const Eigen::Vector3d &G)
+      : curr_point_(curr_point),
+        last_line_C_(last_line_C),
+        last_line_N_(last_line_N),
+        delta_p_(delta_p),
+        delta_q_(delta_q),
+        dt_(dt),
+        G_(G) {}
+
+  bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
+
+ private:
+  const Eigen::Vector3d curr_point_;
+  const Eigen::Vector3d last_line_C_;
+  const Eigen::Vector3d last_line_N_;
+
+  const Eigen::Vector3d delta_p_;
+  const Eigen::Quaterniond delta_q_;
+  const double dt_;
+  const Eigen::Vector3d G_;
+
+  static constexpr int kResidualNums = 3;
+};
+
+struct LidarPlaneFactorSE3 : ceres::SizedCostFunction<1, 7> {
+ public:
+  LidarPlaneFactorSE3(const Eigen::Vector3d &curr_point,
+                      const Eigen::Vector3d &last_plane_C,
+                      const Eigen::Vector3d &last_plane_N)
       : curr_point_(curr_point),
         last_plane_C_(last_plane_C),
-        last_plane_N_(last_plane_N),
-        s_(s) {}
+        last_plane_N_(last_plane_N) {}
 
-  template <typename T>
-  bool operator()(const T *q, const T *t, T *residual) const;
+  LidarPlaneFactorSE3(
+      const Eigen::Vector3d &curr_point,
+      const Eigen::Vector3d &last_point_i,
+      const Eigen::Vector3d &last_point_j,
+      const Eigen::Vector3d &last_point_k)
+      : curr_point_(curr_point),
+        last_plane_C_((last_point_i + last_point_j + last_point_k) / 3),
+        last_plane_N_((last_point_i - last_point_j).cross(last_point_i - last_point_k).normalized()) {
+  }
 
-  static ceres::CostFunction *Create(const Eigen::Vector3d &curr_point,
-                                     const Eigen::Vector3d &last_point_i,
-                                     const Eigen::Vector3d &last_point_j,
-                                     const Eigen::Vector3d &last_point_k,
-                                     const double s);
-
-  static ceres::CostFunction *Create(const Eigen::Vector3d &curr_point,
-                                     const Eigen::Vector3d &last_plane_C,
-                                     const Eigen::Vector3d &last_plane_N);
+  virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
 
  private:
   const Eigen::Vector3d curr_point_;
   const Eigen::Vector3d last_plane_C_;
   const Eigen::Vector3d last_plane_N_;
-  const double s_;
+
+  static constexpr int kResidualNums = 1;
+};
+
+struct LidarPlaneFactorDeskewSE3 : ceres::SizedCostFunction<1, 7, 9> {
+ public:
+  LidarPlaneFactorDeskewSE3(const Eigen::Vector3d &curr_point,
+                            const Eigen::Vector3d &last_plane_C,
+                            const Eigen::Vector3d &last_plane_N,
+                            const Eigen::Vector3d &delta_p,
+                            const Eigen::Quaterniond &delta_q,
+                            const double &dt,
+                            const Eigen::Vector3d &G)
+      : curr_point_(curr_point),
+        last_plane_C_(last_plane_C),
+        last_plane_N_(last_plane_N),
+        delta_p_(delta_p),
+        delta_q_(delta_q),
+        dt_(dt),
+        G_(G) {}
+
+  virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
+
+ private:
+  const Eigen::Vector3d curr_point_;
+  const Eigen::Vector3d last_plane_C_;
+  const Eigen::Vector3d last_plane_N_;
+
+  const Eigen::Vector3d delta_p_;
+  const Eigen::Quaterniond delta_q_;
+  const double dt_;
+  const Eigen::Vector3d G_;
+
+  static constexpr int kResidualNums = 1;
 };

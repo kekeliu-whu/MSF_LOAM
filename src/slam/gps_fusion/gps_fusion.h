@@ -2,7 +2,6 @@
 #define MSF_LOAM_VELODYNE_GPS_FUSION_H
 
 #include <common/rigid_transform.h>
-#include <vector>
 
 #include "common/time.h"
 

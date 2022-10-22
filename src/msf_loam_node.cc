@@ -34,27 +34,25 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <gflags/gflags.h>
+#include <google/protobuf/util/json_util.h>
 #include <nav_msgs/Odometry.h>
-#include <pcl/PCLPointCloud2.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/point_cloud.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <ros/ros.h>
-#include <rosbag/bag.h>
 #include <rosbag/view.h>
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <Eigen/Eigen>
 
-#include "common/common.h"
+#include "common/rigid_transform.h"
 #include "common/tic_toc.h"
+#include "proto/config.pb.h"
 #include "slam/local/laser_odometry.h"
 #include "slam/msg_conversion.h"
 
 DEFINE_bool(is_offline_mode, false, "Runtime mode: online or offline.");
 
 DEFINE_string(bag_filename, "", "Bag file to read in offline mode.");
+
+DEFINE_string(config_filename, "", "Configuration file.");
 
 namespace {
 
@@ -82,7 +80,7 @@ const int kMaxScanNum    = 128;
 const double kScanPeriod = 0.1;  // 扫描周期
 double g_min_range;              // 最小扫描距离
 std::uint64_t g_imu_msgs_num = 0;
-sensor_msgs::PointCloud2ConstPtr g_prev_laser_cloud_msgs;
+Rigid3d g_lidar2imu_transfrom;
 
 template <typename PointT>
 void RemoveInvalidPointsFromCloud(const pcl::PointCloud<PointT> &cloud_in,
@@ -152,6 +150,7 @@ void ComputeRelaTimeForEachPoint(const PointCloudOriginal &laser_cloud_in, std::
 
     double rela_time = relative_angle / (2 * M_PI) * kScanPeriod;
     point.time       = static_cast<float>(rela_time);
+    point.intensity  = point.time;  // todo kk here we assign time to intensity temporarily
     cloud_with_relative_time[point.ring].push_back(point);
   }
 }
@@ -354,12 +353,23 @@ void RealHandleLaserCloudMessage(
   LOG_STEP_TIME("REG", "Separate points into flat point and corner point", t_pts.toc());
 
   TimestampedPointCloud<PointTypeOriginal> scan;
-  scan.time                    = FromRos(laser_cloud_msg->header.stamp);
+  scan.time = FromROS(laser_cloud_msg->header.stamp);
+
+  //
+  // todo
   scan.cloud_full_res          = laser_cloud;
   scan.cloud_surf_less_flat    = cloud_surf_less_flat;
   scan.cloud_surf_flat         = cloud_surf_flat;
   scan.cloud_corner_less_sharp = cloud_corner_less_sharp;
   scan.cloud_corner_sharp      = cloud_corner_sharp;
+
+  // todo function should not be handled here
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_full_res);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_surf_less_flat);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_surf_flat);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_corner_less_sharp);
+  TransformPointCloudInPlace(g_lidar2imu_transfrom, *scan.cloud_corner_sharp);
+
   laser_odometry_handler->AddLaserScan(scan);
 
   LOG_STEP_TIME("REG", "Scan registration", t_whole.toc());
@@ -371,15 +381,11 @@ void TryHandleLaserCloudMessageWithImuIntegrated(
     const sensor_msgs::PointCloud2ConstPtr &laser_cloud_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   // todo remove magic number
-  if (g_imu_msgs_num <= 200) {
-    LOG(WARNING) << "Waiting for imu data...";
+  if (g_imu_msgs_num <= 100) {
+    LOG(WARNING) << "Waiting for imu data, lidar frame @" << laser_cloud_msg->header.stamp.toNSec() << " will be ignored ...";
     return;
   }
-  if (g_prev_laser_cloud_msgs) {
-    // delay to handle laser message for retrieving imu data
-    RealHandleLaserCloudMessage(g_prev_laser_cloud_msgs, laser_odometry_handler);
-  }
-  g_prev_laser_cloud_msgs = laser_cloud_msg;
+  RealHandleLaserCloudMessage(laser_cloud_msg, laser_odometry_handler);
 }
 
 void HandleImuMessage(
@@ -387,11 +393,9 @@ void HandleImuMessage(
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   g_imu_msgs_num++;
   ImuData imu_data;
-  imu_data.time = FromRos(imu_msg->header.stamp);
-  imu_data.linear_acceleration << imu_msg->linear_acceleration.x,
-      imu_msg->linear_acceleration.y, imu_msg->linear_acceleration.z;
-  imu_data.angular_velocity << imu_msg->angular_velocity.x,
-      imu_msg->angular_velocity.y, imu_msg->angular_velocity.z;
+  imu_data.time                = FromROS(imu_msg->header.stamp);
+  imu_data.linear_acceleration = FromROS(imu_msg->linear_acceleration);
+  imu_data.angular_velocity    = FromROS(imu_msg->angular_velocity);
   laser_odometry_handler->AddImu(imu_data);
 }
 
@@ -399,18 +403,29 @@ void HandleOdomMessage(
     const nav_msgs::OdometryConstPtr &odom_msg,
     const std::shared_ptr<LaserOdometry> &laser_odometry_handler) {
   OdometryData odom_data;
-  odom_data.timestamp = FromRos(odom_msg->header.stamp);
-  odom_data.odom      = FromRos(odom_msg->pose);
+  odom_data.timestamp = FromROS(odom_msg->header.stamp);
+  odom_data.odom      = FromROS(odom_msg->pose);
   odom_data.error     = 0;
   laser_odometry_handler->AddOdom(odom_data);
 }
 
 int main(int argc, char **argv) {
   // Set glog and gflags
-  FLAGS_alsologtostderr  = true;
-  FLAGS_colorlogtostderr = true;
+  FLAGS_alsologtostderr = true;
   google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  // Read config file
+  std::ifstream file(FLAGS_config_filename);
+  CHECK(file.is_open()) << "Open file '" << FLAGS_config_filename << "' failed.";
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+
+  proto::MsfLoamConfig proto_cfg;
+  auto status = google::protobuf::util::JsonStringToMessage(buffer.str(), &proto_cfg);
+  CHECK(status.ok()) << "Parse configuration file '" << FLAGS_config_filename << "' failed: " << status.error_message();
+  LOG(INFO) << "Read configuration file success:\n"
+            << proto_cfg.DebugString();
 
   // Set ROS node
   ros::init(argc, argv, "nsf_loam_node");
@@ -419,8 +434,10 @@ int main(int argc, char **argv) {
   LOG_IF(WARNING, !nh.param<double>("minimum_range", g_min_range, 0.3))
       << "Use default minimum_range: 0.3";
 
+  g_lidar2imu_transfrom = FromProto(proto_cfg.lidar2imu_extrinsic_parameters());
+
   auto laser_odometry_handler =
-      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode);
+      std::make_shared<LaserOdometry>(FLAGS_is_offline_mode, proto_cfg);
 
   if (FLAGS_is_offline_mode) {
     CHECK(!FLAGS_bag_filename.empty());
@@ -454,7 +471,11 @@ int main(int argc, char **argv) {
     ros::Subscriber subOdom = nh.subscribe<nav_msgs::Odometry>(
         "/odometry_gt", 100,
         boost::bind(HandleOdomMessage, _1, boost::ref(laser_odometry_handler)));
-    ros::spin();
+
+    // Use AsyncSpinner to handle mutiple message queue with multiple threads
+    ros::AsyncSpinner spinner(4);
+    spinner.start();
+    ros::waitForShutdown();
   }
 
   return 0;

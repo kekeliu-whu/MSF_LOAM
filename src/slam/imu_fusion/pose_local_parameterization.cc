@@ -1,4 +1,7 @@
 #include "slam/imu_fusion/pose_local_parameterization.h"
+#include "slam/imu_fusion/utility.h"
+
+#include <Eigen/Core>
 
 bool PoseLocalParameterization::Plus(const double *x, const double *delta, double *x_plus_delta) const {
   Eigen::Map<const Eigen::Vector3d> _p(x);

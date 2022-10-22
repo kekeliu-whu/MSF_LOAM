@@ -6,9 +6,10 @@
 
 MSF_LOAM is a **M**ulti-**S**ensor **F**usion **SLAM** implementation based on [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM).
 
-<img src="https://github.com/HKUST-Aerial-Robotics/A-LOAM/blob/devel/picture/kitti.png" width = 55% height = 55%/>
+![](picture/result.png)
 
-**Modifier** [Keke Liu](kekliu@outlook.com)
+**Modifier** [Keke Liu](rickyrickc132@gmail.com)  
+**Paper** [arxiv](https://arxiv.org/pdf/2209.12249.pdf)
 
 ## 1. Prerequisites
 ### 1.1 **Ubuntu** and **ROS**
@@ -63,11 +64,11 @@ Thanks for LOAM (J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real
 ## 5. Features
 ### DONE
 * Graph based LiDAR-GPS fusion
-* IMU extrinsic parameter estimation
-* LiDAR-IMU loosely-coupled localization
+* LiDAR-IMU tightly-coupled localization, step1
+* LiDAR-IMU extrinsic parameter estimation
 
 ### TODO
-* LiDAR-IMU tightly-coupled localization and LiDAR scan undistortion by IMU preintegration
+* LiDAR-IMU tightly-coupled localization, step2
 * Loop closure by [scancontext](https://github.com/irapkaist/scancontext)
 * Online temporal calibration for system
 

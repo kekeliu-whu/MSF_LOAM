@@ -25,7 +25,7 @@ class Utility {
       imag_factor           = sin_half_theta / theta;
     }
 
-    // return {cos(t/2), sin(t/2)/t*t[0], sin(t/2)/t*t[1], sin(t/2)/t*t[2]}
+    // return {cos(|t|/2), sin(|t|/2)/|t|*t}
     return Eigen::Quaterniond(real_factor, imag_factor * v3d.x(), imag_factor * v3d.y(), imag_factor * v3d.z())
         .cast<Scalar_t>();
   }

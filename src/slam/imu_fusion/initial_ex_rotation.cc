@@ -1,7 +1,7 @@
 #include "initial_ex_rotation.h"
-#include <Eigen/src/Geometry/Quaternion.h>
-#include <cstdio>
 #include "utility.h"
+
+#include <ros/console.h>
 
 using namespace Eigen;
 

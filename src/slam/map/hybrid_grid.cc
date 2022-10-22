@@ -28,7 +28,7 @@
 
 #include "common/common.h"
 #include "glog/logging.h"
-#include "slam/hybrid_grid.h"
+#include "slam/map/hybrid_grid.h"
 
 // Converts an 'index' with each dimension from 0 to 2^'bits' - 1 to a flat
 // z-major index.
@@ -535,8 +535,6 @@ class HybridGridImpl : public HybridGridBase<PointCloudPtr> {
 
 HybridGrid::HybridGrid(const float& resolution)
     : hybrid_grid_(new HybridGridImpl(resolution)) {}
-
-HybridGrid::~HybridGrid() { delete hybrid_grid_; }
 
 PointCloudPtr HybridGrid::GetSurroundedCloud(const PointCloudConstPtr& scan,
                                              const Rigid3d& pose) {

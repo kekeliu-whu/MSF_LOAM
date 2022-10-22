@@ -1,10 +1,10 @@
 #pragma once
 
+#include "common/common.h"
 #include "common/time.h"
-#include <Eigen/Eigen>
 
 struct ImuData {
   Time time;
-  Eigen::Vector3d linear_acceleration;
-  Eigen::Vector3d angular_velocity;
+  Vector3d linear_acceleration;
+  Vector3d angular_velocity;
 };

@@ -1,9 +1,7 @@
 #include <fmt/format.h>
-#include <algorithm>
 #include <fstream>
 
 #include "common/common.h"
-#include "msg.pb.h"
 #include "slam/imu_fusion/initial_ex_rotation.h"
 #include "slam/imu_fusion/utility.h"
 #include "slam/msg_conversion.h"

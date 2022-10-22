@@ -5,23 +5,24 @@
 #include <nav_msgs/Path.h>
 #include <pcl/filters/voxel_grid.h>
 #include <tf/transform_broadcaster.h>
+#include <boost/optional/optional.hpp>
 #include <condition_variable>
 #include <queue>
 #include <thread>
 
 #include "common/common.h"
 #include "common/timestamped_pointcloud.h"
-#include "msg.pb.h"
+#include "proto/config.pb.h"
+#include "proto/msg.pb.h"
+#include "slam/estimator/estimator.h"
 #include "slam/gps_fusion/gps_fusion.h"
-#include "slam/hybrid_grid.h"
 #include "slam/imu_fusion/types.h"
-#include "slam/local/scan_matching/scan_matcher.h"
-
-using LaserOdometryResultType = TimestampedPointCloud<PointTypeOriginal>;
+#include "slam/local/scan_matching/mapping_scan_matcher.h"
+#include "slam/map/hybrid_grid.h"
 
 class LaserMapping {
  public:
-  explicit LaserMapping(bool is_offline_mode);
+  explicit LaserMapping(bool is_offline_mode, proto::MsfLoamConfig config);
 
   ~LaserMapping();
 
@@ -38,7 +39,7 @@ class LaserMapping {
       const std::vector<ImuData> &queue,
       LaserOdometryResultType &laser_odometry_result_deskewed);
 
-  void FilterScanFeature(const LaserOdometryResultType &odom_result, LaserOdometryResultType &odom_result_filtered);
+  void FilterLessFlatLessCornerFeature(const LaserOdometryResultType &odom_result, LaserOdometryResultType &odom_result_filtered);
 
   void MatchScan2Map(const LaserOdometryResultType &odom_result);
 
@@ -61,7 +62,7 @@ class LaserMapping {
 
  private:
   std::shared_ptr<GpsFusion> gps_fusion_handler_;
-  std::unique_ptr<ScanMatcher> scan_matcher_;
+  std::unique_ptr<MappingScanMatcher> scan_matcher_;
 
   int frame_idx_cur_;
 
@@ -69,6 +70,9 @@ class LaserMapping {
 
   absl::Mutex mtx_odometry_result_queue_;
   std::queue<LaserOdometryResultType> odometry_result_queue_ ABSL_GUARDED_BY(mtx_odometry_result_queue_);
+  boost::optional<LaserOdometryResultType> prev_odometry_result_;
+
+  Estimator estimator_;
 
   HybridGrid hybrid_grid_map_corner_;
   HybridGrid hybrid_grid_map_surf_;
@@ -82,6 +86,8 @@ class LaserMapping {
   Rigid3d pose_map_scan2world_;
   // Transformation between odom's world and map's world frame
   Rigid3d pose_odom2map_;
+
+  Vector3d velocity_;
 
   /**
    * @brief ROS
@@ -115,6 +121,8 @@ class LaserMapping {
   volatile bool should_exit_;
 
   proto::PbData pb_data_;
+
+  proto::MsfLoamConfig config_;
 };
 
 #endif  // MSF_LOAM_VELODYNE_LASER_MAPPING_H

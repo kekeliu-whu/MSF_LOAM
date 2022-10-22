@@ -51,9 +51,10 @@
 #include "slam/local/laser_odometry.h"
 #include "slam/local/scan_matching/odometry_scan_matcher.h"
 
-LaserOdometry::LaserOdometry(bool is_offline_mode)
-    : laser_mapper_handler_(std::make_shared<LaserMapping>(is_offline_mode)),
-      scan_matcher_(std::make_unique<OdometryScanMatcher>()) {
+LaserOdometry::LaserOdometry(bool is_offline_mode, proto::MsfLoamConfig config)
+    : laser_mapper_handler_(std::make_shared<LaserMapping>(is_offline_mode, config)),
+      scan_matcher_(std::make_unique<OdometryScanMatcher>()),
+      config_(config) {
   // NodeHandle uses reference counting internally,
   // thus a local variable can be created here
   ros::NodeHandle nh;
@@ -105,8 +106,8 @@ void LaserOdometry::PublishTrajectory(const TimestampedPointCloud<PointTypeOrigi
   nav_msgs::Odometry laserOdometry;
   laserOdometry.header.frame_id = "camera_init";
   laserOdometry.child_frame_id  = "laser_odom";
-  laserOdometry.header.stamp    = ToRos(scan_curr.time);
-  laserOdometry.pose            = ToRos(scan_curr.odom_pose);
+  laserOdometry.header.stamp    = ToROS(scan_curr.time);
+  laserOdometry.pose            = ToROS(scan_curr.odom_pose);
   laser_odom_publisher_.publish(laserOdometry);
 
   geometry_msgs::PoseStamped laserPose;

@@ -4,85 +4,97 @@
 
 #include "slam/local/scan_matching/lidar_factor.h"
 
-template <typename T>
-bool LidarEdgeFactor::operator()(const T *q, const T *t, T *residual) const {
-  Eigen::Matrix<T, 3, 1> cp  = curr_point_.cast<T>();
-  Eigen::Matrix<T, 3, 1> lpa = last_point_a_.cast<T>();
-  Eigen::Matrix<T, 3, 1> lpb = last_point_b_.cast<T>();
+bool LidarEdgeFactorSE3::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
+  Eigen::Map<Eigen::Matrix<double, kResidualNums, 1>> residual(residuals);
 
-  Eigen::Quaternion<T> g_r_curr2last(q);
-  Eigen::Quaternion<T> q_identity{T(1), T(0), T(0), T(0)};
-  g_r_curr2last = q_identity.slerp(T(s_), g_r_curr2last);
-  Eigen::Matrix<T, 3, 1> g_t_curr2last{T(s_) * t[0], T(s_) * t[1],
-                                       T(s_) * t[2]};
+  Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+  Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+  residual = last_line_N_.cross(Qi * curr_point_ + Pi - last_line_C_);
 
-  Eigen::Matrix<T, 3, 1> lp;
-  lp = g_r_curr2last * cp + g_t_curr2last;
-
-  Eigen::Matrix<T, 3, 1> nu = (lp - lpa).cross(lp - lpb);
-  Eigen::Matrix<T, 3, 1> de = lpa - lpb;
-
-  residual[0] = nu.norm() / de.norm();
+  if (jacobians) {
+    if (jacobians[0]) {
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
+      jacobian_pose_i.setZero();
+      jacobian_pose_i.block<kResidualNums, 3>(0, 0) = Utility::skewSymmetric(last_line_N_);
+      jacobian_pose_i.block<kResidualNums, 3>(0, 3) = -Utility::skewSymmetric(last_line_N_) * (Qi.toRotationMatrix() * Utility::skewSymmetric(curr_point_));
+    }
+  }
 
   return true;
 }
 
-template bool LidarEdgeFactor::operator()<double>(double const *,
-                                                  double const *,
-                                                  double *) const;
-template bool LidarEdgeFactor::operator()<ceres::Jet<double, 7> >(
-    ceres::Jet<double, 7> const *, ceres::Jet<double, 7> const *,
-    ceres::Jet<double, 7> *) const;
+bool LidarPlaneFactorSE3::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
+  Eigen::Map<Eigen::Matrix<double, kResidualNums, 1>> residual(residuals);
 
-ceres::CostFunction *LidarEdgeFactor::Create(
-    const Eigen::Vector3d &curr_point, const Eigen::Vector3d &last_point_a,
-    const Eigen::Vector3d &last_point_b, const double s) {
-  return new ceres::AutoDiffCostFunction<LidarEdgeFactor, 1, 4, 3>(
-      new LidarEdgeFactor(curr_point, last_point_a, last_point_b, s));
-}
+  Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+  Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+  // todo
+  residual.setConstant(last_plane_N_.dot((Qi * curr_point_ + Pi - last_plane_C_)));
 
-template <typename T>
-bool LidarPlaneFactor::operator()(const T *q, const T *t, T *residual) const {
-  Eigen::Matrix<T, 3, 1> cp  = curr_point_.cast<T>();
-  Eigen::Matrix<T, 3, 1> lpi = last_plane_C_.cast<T>();
-  Eigen::Matrix<T, 3, 1> ijk = last_plane_N_.cast<T>();
-
-  Eigen::Quaternion<T> g_r_curr2last(q);
-  Eigen::Quaternion<T> q_identity{T(1), T(0), T(0), T(0)};
-  g_r_curr2last = q_identity.slerp(T(s_), g_r_curr2last);
-  Eigen::Matrix<T, 3, 1> g_t_curr2last{T(s_) * t[0], T(s_) * t[1],
-                                       T(s_) * t[2]};
-
-  Eigen::Matrix<T, 3, 1> lp;
-  lp = g_r_curr2last * cp + g_t_curr2last;
-
-  residual[0] = (lp - lpi).dot(ijk);
+  if (jacobians) {
+    if (jacobians[0]) {
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
+      jacobian_pose_i.setZero();
+      jacobian_pose_i.block<kResidualNums, 3>(0, 0) = last_plane_N_;
+      jacobian_pose_i.block<kResidualNums, 3>(0, 3) = -last_plane_N_.transpose() * (Qi.toRotationMatrix() * Utility::skewSymmetric(curr_point_));
+    }
+  }
 
   return true;
 }
 
-template bool LidarPlaneFactor::operator()<double>(double const *,
-                                                   double const *,
-                                                   double *) const;
-template bool LidarPlaneFactor::operator()<ceres::Jet<double, 7> >(
-    ceres::Jet<double, 7> const *, ceres::Jet<double, 7> const *,
-    ceres::Jet<double, 7> *) const;
+bool LidarEdgeFactorDeskewSE3::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
+  Eigen::Map<Eigen::Matrix<double, kResidualNums, 1>> residual(residuals);
 
-ceres::CostFunction *LidarPlaneFactor::Create(
-    const Eigen::Vector3d &curr_point, const Eigen::Vector3d &last_point_i,
-    const Eigen::Vector3d &last_point_j, const Eigen::Vector3d &last_point_k,
-    const double s) {
-  auto last_plane_N =
-      (last_point_i - last_point_j).cross(last_point_i - last_point_k);
-  last_plane_N.normalize();
-  auto last_plane_C = (last_point_i + last_point_j + last_point_k) / 3;
-  return new ceres::AutoDiffCostFunction<LidarPlaneFactor, 1, 4, 3>(
-      new LidarPlaneFactor(curr_point, last_plane_C, last_plane_N, s));
+  Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+  Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+  Eigen::Vector3d Vi(parameters[1][0], parameters[1][1], parameters[1][2]);
+
+  residual = last_line_N_.cross(Qi * (delta_q_ * curr_point_ + delta_p_) + Vi * dt_ - 0.5 * G_ * dt_ * dt_ + Pi - last_line_C_);
+
+  if (jacobians) {
+    if (jacobians[0]) {
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
+      jacobian_pose_i.setZero();
+      jacobian_pose_i.block<kResidualNums, 3>(0, 0) = Utility::skewSymmetric(last_line_N_);
+      jacobian_pose_i.block<kResidualNums, 3>(0, 3) = -Utility::skewSymmetric(last_line_N_) *
+                                                      (Qi.toRotationMatrix() * Utility::skewSymmetric(delta_q_ * curr_point_ + delta_p_));
+    }
+
+    if (jacobians[1]) {
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 9, Eigen::RowMajor>> jacobian_bias_i(jacobians[1]);
+      jacobian_bias_i.setZero();
+      jacobian_bias_i.block<kResidualNums, 3>(0, 0) = Utility::skewSymmetric(last_line_N_) * dt_;
+    }
+  }
+
+  return true;
 }
 
-ceres::CostFunction *LidarPlaneFactor::Create(
-    const Eigen::Vector3d &curr_point, const Eigen::Vector3d &last_plane_C,
-    const Eigen::Vector3d &last_plane_N) {
-  return new ceres::AutoDiffCostFunction<LidarPlaneFactor, 1, 4, 3>(
-      new LidarPlaneFactor(curr_point, last_plane_C, last_plane_N, 1.0));
+bool LidarPlaneFactorDeskewSE3::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const {
+  Eigen::Map<Eigen::Matrix<double, kResidualNums, 1>> residual(residuals);
+
+  Eigen::Vector3d Pi(parameters[0][0], parameters[0][1], parameters[0][2]);
+  Eigen::Quaterniond Qi(parameters[0][6], parameters[0][3], parameters[0][4], parameters[0][5]);
+  Eigen::Vector3d Vi(parameters[1][0], parameters[1][1], parameters[1][2]);
+
+  residual(0, 0) = last_plane_N_.dot(Qi * (delta_q_ * curr_point_ + delta_p_) + Vi * dt_ - 0.5 * G_ * dt_ * dt_ + Pi - last_plane_C_);
+
+  if (jacobians) {
+    if (jacobians[0]) {
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 7, Eigen::RowMajor>> jacobian_pose_i(jacobians[0]);
+      jacobian_pose_i.setZero();
+      jacobian_pose_i.block<kResidualNums, 3>(0, 0) = last_plane_N_.transpose();
+      jacobian_pose_i.block<kResidualNums, 3>(0, 3) = -last_plane_N_.transpose() *
+                                                      (Qi.toRotationMatrix() * Utility::skewSymmetric(delta_q_ * curr_point_ + delta_p_));
+    }
+
+    if (jacobians[1]) {
+      Eigen::Map<Eigen::Matrix<double, kResidualNums, 9, Eigen::RowMajor>> jacobian_bias_i(jacobians[1]);
+      jacobian_bias_i.setZero();
+      jacobian_bias_i.block<kResidualNums, 3>(0, 0) = last_plane_N_.transpose() * dt_;
+    }
+  }
+
+  return true;
 }

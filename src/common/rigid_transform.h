@@ -28,18 +28,25 @@ template <typename T>
 using Vector = Eigen::Matrix<T, 3, 1>;
 
 template <typename T>
+using Vector7 = Eigen::Matrix<T, 7, 1>;
+
+template <typename T>
 using Quaternion = Eigen::Quaternion<T>;
 
 template <typename FloatType>
 class Rigid3 {
  public:
   using Vector_     = Vector<FloatType>;
+  using Vector7_    = Vector7<FloatType>;
   using Quaternion_ = Quaternion<FloatType>;
 
   Rigid3()
       : translation_(Vector_::Zero()), rotation_(Quaternion_::Identity()) {}
   Rigid3(const Vector_& translation, const Quaternion_& rotation)
       : translation_(translation), rotation_(rotation) {}
+  Rigid3(const Vector7_& vector)
+      : translation_(vector.template block<3, 1>(0, 0)),
+        rotation_(vector.template block<4, 1>(3, 0)) {}
 
   static Rigid3 Rotation(const Quaternion_& rotation) {
     return Rigid3(Vector_::Zero(), rotation);
@@ -47,6 +54,13 @@ class Rigid3 {
 
   static Rigid3 Translation(const Vector_& vector) {
     return Rigid3(vector, Quaternion_::Identity());
+  }
+
+  Vector7_ ToVector7() {
+    Vector7_ vector7;
+    vector7.template block<3, 1>(0, 0) = translation_;
+    vector7.template block<4, 1>(3, 0) = rotation_.coeffs();
+    return vector7;
   }
 
   static Rigid3<FloatType> Identity() { return Rigid3<FloatType>(); }
@@ -115,18 +129,19 @@ using Rigid3f = Rigid3<float>;
 
 #include "common/common.h"
 
-inline PointType operator*(const Rigid3d& transform, const PointType& point) {
-  PointType point_out = point;
+template <typename T>
+inline T TransformPoint(const Rigid3d& transform, const T& point) {
+  T point_out = point;
   point_out.getVector3fMap() =
-      (transform * point.getVector3fMap().cast<double>()).cast<float>();
+      (transform * point.getVector3fMap().template cast<double>()).template cast<float>();
   return point_out;
 }
 
-inline PointTypeOriginal operator*(const Rigid3d& transform, const PointTypeOriginal& point) {
-  PointTypeOriginal point_out = point;
-  point_out.getVector3fMap() =
-      (transform * point.getVector3fMap().cast<double>()).cast<float>();
-  return point_out;
+template <typename T>
+void TransformPointCloudInPlace(const Rigid3d& transform, pcl::PointCloud<T>& pc) {
+  for (auto&& point : pc) {
+    point.getVector3fMap() = (transform * point.getVector3fMap().template cast<double>()).template cast<float>();
+  }
 }
 
 #endif  // LOAM_VELODYNE_RIGID_TRANSFORM_H
